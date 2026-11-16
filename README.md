@@ -102,7 +102,7 @@ end
 | 大厅服务器 | `server/` | Node.js，一个 UDP 端口：房间列表、打洞介绍、可选中转。只用 Node 自带模块，可以自己架 |
 | 示例插件 | `samples/hello/` | 最小的插件：Lua + 一个 C 写的联机程序插件 |
 | 测试 | `tests/` | `python -X utf8 -I tests/run_all.py`：编基底、跑 8 套离线测试 |
-| 文档 | `docs/` | [使用说明](docs/USAGE.md)（编译、安装、三层怎么写、服务器）、[适配层钩子](docs/FORNET_ADAPTER.md)、[插件 API](docs/EXTENSIONS_API.md) |
+| 文档 | `docs/` | [使用说明](docs/USAGE.md)（编译、安装、三层怎么写、服务器）、[适配层钩子](docs/FORNET_ADAPTER.md)、[插件 API](docs/EXTENSIONS_API.md)、[大厅服务器](server/README.md) |
 
 ## 协议名字
 

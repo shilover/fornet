@@ -110,7 +110,7 @@ play mod, live in `mods\<base pack>\` and are built by it.
 | Lobby server | `server/` | Node.js on one UDP port: room list, hole-punch introductions, optional relay. Built-in modules only; self-hostable |
 | Sample extension | `samples/hello/` | A minimal extension: Lua + a lobby plugin written in C |
 | Tests | `tests/` | `python -X utf8 -I tests/run_all.py`: builds the base and runs 8 offline suites |
-| Docs | `docs/` | [Usage guide](docs/USAGE.en.md) (build, install, how to write each layer, server), [adapter hooks](docs/FORNET_ADAPTER.md), [extension API](docs/EXTENSIONS_API.md) (both Chinese) |
+| Docs | `docs/` | [Usage guide](docs/USAGE.en.md) (build, install, how to write each layer, server), [adapter hooks](docs/FORNET_ADAPTER.md), [extension API](docs/EXTENSIONS_API.md) (both Chinese); [lobby server](server/README.en.md) |
 
 ## Wire names
 
