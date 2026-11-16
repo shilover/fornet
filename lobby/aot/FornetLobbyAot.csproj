@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 联机程序编成 NativeAOT 原生 DLL（fornet_lobby.dll），由游戏里的 Lua 用 package.loadlib 载入，代替单独的 exe。
+       和 build.bat 编的 exe 是同一份源码：旧窗口（MainForm）在这里对着 Headless.cs 的无界面替身编译。
+       -p:FornetExe=true：同一份代码编成无界面 exe（FornetLobby-headless.exe，不发布），给要启动联机程序的测试用。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <OutputType Condition="'$(FornetExe)' == 'true'">Exe</OutputType>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishAot>true</PublishAot>
+    <NativeLib Condition="'$(FornetExe)' != 'true'">Shared</NativeLib>
+    <AssemblyName>fornet_lobby</AssemblyName>
+    <AssemblyName Condition="'$(FornetExe)' == 'true'">FornetLobby-headless</AssemblyName>
+    <RootNamespace>ForNet</RootNamespace>
+    <DefineConstants>$(DefineConstants);AOT</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CS0618;CS0649;CS0169;CS0414;CS0067;SYSLIB0014</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Program.cs;..\Transport.cs;..\Mesh.cs;..\MeshMp.cs;..\BridgeUp.cs;..\Ext.cs;..\NetExtras.cs;..\ServerLobby.cs;..\RankedApi.cs;..\Reliable.cs;..\LocalAiApi.cs;..\GameInfo.cs;..\GamePipe.cs;..\WireTag.cs" />
+    <Compile Include="..\Headless.cs" />
+    <!-- 游戏适配的 C#（本地 AI、游戏名字、线上协议名 WireTag.Configure）。环境变量 FORNET_GAME_CS = 分号分隔的绝对路径；没设就是中性名、不带本地 AI 的基底 -->
+    <Compile Include="$(FORNET_GAME_CS)" Condition="'$(FORNET_GAME_CS)' != ''" />
+    <Compile Include="AotEntry.cs" Condition="'$(FornetExe)' != 'true'" />
+    <Compile Include="..\Bridge.cs;..\BridgeRoomLink.cs" />     <!-- 桥接传输是基底的一部分（通用、没有桥接 DLL 时不起作用） -->
+  </ItemGroup>
+</Project>

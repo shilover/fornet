@@ -1,0 +1,10 @@
+*.exe
+*.dll
+*.pdb
+*.lib
+*.obj
+lobby/aot/bin/
+lobby/aot/obj/
+lobby/aot/out/
+samples/hello/out/
+__pycache__/

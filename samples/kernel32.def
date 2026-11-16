@@ -1,0 +1,27 @@
+; 只用来生成 kernel32 的导入库（不用装 Windows SDK）；示例插件用得到的函数都在这张单子里
+LIBRARY kernel32.dll
+EXPORTS
+GetModuleHandleW
+GetModuleHandleExW
+GetProcAddress
+GetModuleFileNameW
+DisableThreadLibraryCalls
+CreateThread
+CloseHandle
+Sleep
+GetTickCount64
+GetLocalTime
+GetFileAttributesW
+CreateFileW
+ReadFile
+WriteFile
+GetCurrentProcessId
+CreateNamedPipeW
+ConnectNamedPipe
+DisconnectNamedPipe
+PeekNamedPipe
+GetLastError
+AcquireSRWLockExclusive
+ReleaseSRWLockExclusive
+MoveFileExW
+GetCurrentThreadId

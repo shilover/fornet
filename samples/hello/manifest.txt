@@ -1,0 +1,8 @@
+name=hello
+version=0.1.0
+title=示例扩展
+author=sample
+needsBase=0.34.0
+api=1
+lobby=lobby_hello.dll
+consent=share
