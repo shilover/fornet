@@ -72,7 +72,7 @@ mod 就是同一个安装里 `mods\` 下的文件夹；玩家可以单独启用 
 | 适配层 | `<模组目录>\games\<游戏名>\` | `manifest.txt`（`name=`、`entry=`、`needsFornet=`）+ 入口 Lua：把这款游戏的 SDK 当服务 `game` 提供出去。全权限，**不写玩法** | [使用说明第 4 节](docs/USAGE.md#4-适配层games名)、[适配层钩子](docs/FORNET_ADAPTER.md) |
 | 玩法 mod | `<模组目录>\mods\<名>\` | `manifest.txt`（`name=`、`version=`、`game=`、`needs=`……）+ `on.txt`（启用）+ 入口 Lua，拿到句柄 `M`：服务 / 事件 / 网络频道 / 对局占用 / 键位。第一个通常是**基础玩法 mod**：构造 `fornet_ui / hud / match`、画联机面板、设 `FORNET.adapter` 接口表、跑每拍的打包 / 应用 | [使用说明第 5 节](docs/USAGE.md#5-玩法-modmods名) |
 | 插件 | `<模组目录>\ext\<名>\` | `manifest.txt`（`name=`、`version=`、`api=2`、`lobby=`、`consent=`）+ `on.txt` + `init.lua`（沙箱，只有 `API` 表）+ 可选的 `lobby_<名>.dll`（C 接口 `fnx_init / fnx_cmd / fnx_tick / fnx_shutdown`） | [使用说明第 6 节](docs/USAGE.md#6-插件ext名)、[插件 API](docs/EXTENSIONS_API.md)、完整例子 [`samples/hello/`](samples/hello/) |
-| 4net | `<模组目录>\Scripts\` + `fornet_lobby.dll` | 不用写：拷 `lua\` 和编出来的 DLL | [使用说明第 2、3 节](docs/USAGE.md#2-编译) |
+| 4net | `<模组目录>\Scripts\` + `fornet_lobby.dll` | 不用写：拷 `lua\` 和 DLL（[Releases](https://github.com/shilover/fornet/releases) 页有编好的，也可以自己编） | [使用说明第 2、3 节](docs/USAGE.md#2-编译) |
 
 适配层（`games\mygame\main.lua`）：
 
@@ -116,8 +116,29 @@ end
 | 联机程序 | `lobby/` | C#：局域网发现、服务器大厅、UDP 打洞、全互连多人、可靠事件、桥接传输。编成 NativeAOT 的 `fornet_lobby.dll` |
 | 大厅服务器 | `server/` | Node.js，一个 UDP 端口：房间列表、打洞介绍、可选中转。只用 Node 自带模块，可以自己架 |
 | 示例插件 | `samples/hello/` | 最小的插件：Lua + 一个 C 写的联机程序插件 |
-| 测试 | `tests/` | `python -X utf8 -I tests/run_all.py`：编基底、跑 8 套离线测试 |
+| 测试 | `tests/` | `python -X utf8 -I tests/run_all.py`：编基底、跑 9 套离线测试 |
 | 文档 | `docs/` | [使用说明](docs/USAGE.md)（编译、安装、三层怎么写、服务器）、[适配层钩子](docs/FORNET_ADAPTER.md)、[插件 API](docs/EXTENSIONS_API.md)、[大厅服务器](server/README.zh.md) |
+
+## 不用编译就能给的游戏设置（0.4.0）
+
+联机程序要知道游戏的几样东西：进程名、本地名字前缀、模组版本号，可选的还有存档在哪（每局开始前备份）、用哪套协议名字。
+写在适配层的 `manifest.txt` 里，编好的 `fornet_lobby.dll` 启动时会读：
+
+```
+name=mygame
+entry=main.lua
+needsFornet=0.4.0
+mod_name=MyGame_MP
+process=MyGame
+game_zh=我的游戏
+game_en=My Game
+app_version=1.0.0
+save_dir=%LOCALAPPDATA%\MyGame\Saved\SaveGames
+save_file=Save.sav
+```
+
+全部的键和默认值见[使用说明第 4 节](docs/USAGE.md#4-适配层games名)。读到了什么用 `FornetLobby-base.exe --print-game 输出.txt` 核对。
+只有真正的游戏代码（比如本地 AI 对手）还要编进去（`FORNET_GAME_CS`，[第 2 节](docs/USAGE.md#2-编译)）；那样编进去的值优先于 manifest。
 
 ## 协议名字
 

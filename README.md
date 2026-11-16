@@ -82,7 +82,7 @@ Dependencies only point down: 4net does not know which modes exist; the adapter 
 | Adapter | `<mod folder>\games\<game>\` | `manifest.txt` (`name=`, `entry=`, `needsFornet=`) + an entry Lua that offers the game's SDK as the service `game`. Full access, **no game modes in here** | [Usage guide, section 4](docs/USAGE.en.md#4-the-adapter-gamesname), [adapter hooks](docs/FORNET_ADAPTER.md) (Chinese) |
 | Play mod | `<mod folder>\mods\<name>\` | `manifest.txt` (`name=`, `version=`, `game=`, `needs=`, …) + `on.txt` (enabled) + an entry Lua that receives a handle `M`: services / events / network channel / activity lock / key binding. The first one is usually the **base play mod**: it builds `fornet_ui / hud / match`, draws the online panel, sets the `FORNET.adapter` interface table and runs the per-tick pack / apply | [Usage guide, section 5](docs/USAGE.en.md#5-play-mods-modsname) |
 | Extension | `<mod folder>\ext\<name>\` | `manifest.txt` (`name=`, `version=`, `api=2`, `lobby=`, `consent=`) + `on.txt` + `init.lua` (sandboxed, only the `API` table) + an optional `lobby_<name>.dll` (C ABI `fnx_init / fnx_cmd / fnx_tick / fnx_shutdown`) | [Usage guide, section 6](docs/USAGE.en.md#6-extensions-extname), [extension API](docs/EXTENSIONS_API.md) (Chinese), full example [`samples/hello/`](samples/hello/) |
-| 4net | `<mod folder>\Scripts\` + `fornet_lobby.dll` | Nothing: copy `lua\` and the built DLL | [Usage guide, sections 2–3](docs/USAGE.en.md#2-build) |
+| 4net | `<mod folder>\Scripts\` + `fornet_lobby.dll` | Nothing: copy `lua\` and the DLL (prebuilt on the [Releases](https://github.com/shilover/fornet/releases) page, or build it) | [Usage guide, sections 2–3](docs/USAGE.en.md#2-build) |
 
 Adapter (`games\mygame\main.lua`):
 
@@ -127,14 +127,37 @@ play mod, live in `mods\<base pack>\` and are built by it.
 | Lobby helper | `lobby/` | C#: LAN discovery, lobby-server rooms, UDP hole punching, full-mesh multiplayer, reliable events, bridge transports. Built as NativeAOT `fornet_lobby.dll` |
 | Lobby server | `server/` | Node.js on one UDP port: room list, hole-punch introductions, optional relay. Built-in modules only; self-hostable |
 | Sample extension | `samples/hello/` | A minimal extension: Lua + a lobby plugin written in C |
-| Tests | `tests/` | `python -X utf8 -I tests/run_all.py`: builds the base and runs 8 offline suites |
+| Tests | `tests/` | `python -X utf8 -I tests/run_all.py`: builds the base and runs 9 offline suites |
 | Docs | `docs/` | [Usage guide](docs/USAGE.en.md) (build, install, how to write each layer, server), [adapter hooks](docs/FORNET_ADAPTER.md), [extension API](docs/EXTENSIONS_API.md) (both Chinese); [lobby server](server/README.md) |
+
+## Game settings without compiling (0.4.0)
+
+The lobby helper needs a few things about your game: its process name, a local name prefix, your mod's version, and optionally where the save
+is (to back it up before each match) and which wire names to use. Write them in the adapter's `manifest.txt`; the prebuilt
+`fornet_lobby.dll` reads them at start-up:
+
+```
+name=mygame
+entry=main.lua
+needsFornet=0.4.0
+mod_name=MyGame_MP
+process=MyGame
+game_en=My Game
+game_zh=我的游戏
+app_version=1.0.0
+save_dir=%LOCALAPPDATA%\MyGame\Saved\SaveGames
+save_file=Save.sav
+```
+
+Every key and its default: [usage guide, section 4](docs/USAGE.en.md#4-the-adapter-gamesname). Check what was read with
+`FornetLobby-base.exe --print-game out.txt`. Only real game code (for example a local AI opponent) still has to be compiled in
+(`FORNET_GAME_CS`, [section 2](docs/USAGE.en.md#2-build)); values compiled in that way win over the manifest.
 
 ## Wire names
 
 By default the names on the wire are 4net's neutral ones: `4N|…` control packets to the lobby server, `4NHELLO` / `4NEV` / … between players,
 the lobby plugin C ABI prefix `fnx_`, test environment variables prefixed `FORNET_`. A game whose players already use another set can set them
-back in its own C# (`lobby/WireTag.cs`) and start the server with `--wire-server / --wire-peer` (or replace the line marked `@wire-defaults`),
+back with the `wire_*` manifest keys (or in its own C#, `lobby/WireTag.cs`) and start the server with `--wire-server / --wire-peer` (or replace the line marked `@wire-defaults`),
 and the wire format stays byte-for-byte the same. See the [usage guide](docs/USAGE.en.md#wire-names).
 
 ## License

@@ -116,6 +116,7 @@ FMATCH = mk({ out = out, MATCH = MATCH, ... })
 联机程序基底不认识游戏。适件要往里加东西（本地 AI、游戏名、备份存档）就写 C#，编进同一个程序集：
 
 - 环境变量 `FORNET_GAME_CS` = 分号分隔的 `.cs` 绝对路径；`lobby\build.bat` 和 `lobby\aot\` 工程都读它。
+- **0.4.0 起游戏名 / 进程名 / 版本 / 协议名字 / 存档备份不用编**：写在适配 `manifest.txt`（键见 [USAGE.md 第 4 节](USAGE.md)），联机程序启动时读（`GameInfo.Load`），编好的 DLL 直接能用。下面编译的写法还在、两边都给时编进去的优先。
 - 在自己的 .cs 里实现 partial 方法：`GameInfo.Configure`（`ModName / TitleZh / TitleEn / GameZh / GameEn / ProcessName / BackupSave`）、`LocalAiSupport.Register(ref ILocalAiImpl)`（本地 AI）。没实现就是基底默认值、没有本地 AI。
 
 ## 6. 版本

@@ -2,7 +2,7 @@
 
 [中文](USAGE.md)
 
-For people who want to add online play to a UE4SS game with 4net. Host version `0.3.0`.
+For people who want to add online play to a UE4SS game with 4net. Host version `0.4.0`.
 
 > There is **no ready-made sample game** (adapter + base play mod) in this repository yet: the one game that uses 4net keeps its adapter
 > elsewhere. This guide describes the interfaces and conventions. For a new game, first aim for "both players see each other's puppet move",
@@ -29,6 +29,8 @@ python -X utf8 -I tests\run_all.py
 
 `build_aot.bat` takes `dotnet.exe` from `FORNET_DOTNET`, or `dotnet` on PATH.
 
+**The game's name, process name, version, wire names and the save backup** are, since 0.4.0, keys in the adapter's `manifest.txt` (section 4) that the lobby helper reads at start-up: **you can use the prebuilt `fornet_lobby.dll` without compiling anything**.
+
 **Your game's own C#** (a local AI opponent, the game's name, backing up the save before a match, …) stays out of the base: set
 `FORNET_GAME_CS` to a `;`-separated list of absolute `.cs` paths and both `build.bat` and the AOT project compile them into the same assembly.
 Implement the partial methods there:
@@ -46,7 +48,7 @@ The interfaces are in `lobby/GameInfo.cs`, `lobby/LocalAiApi.cs` and `lobby/Wire
 A few names travel inside the packets: the lobby server's control tag (`4N|REG|…`), the peer control prefix (`4NHELLO`, `4NEV`, the
 forward heads `4NR|` …), the salt of the room-tag hash, the prefix of test environment variables (`FORNET_`), the export prefix of lobby
 plugins (`fnx_`) and the bridge pipe prefix (`fornet_bridge_`). They default to 4net's neutral names in `lobby/WireTag.cs`.
-**A new game just keeps the defaults.**
+**A new game just keeps the defaults.** Since 0.4.0 they can also be set with the `wire_*` keys in the adapter's manifest (section 4), no compiling needed.
 
 A game whose players already use another set of names (say it had its own online mod before moving onto 4net) sets them back in
 `WireTag.Configure`; the wire format then stays byte-for-byte the same, so installed old versions and running servers keep working:
@@ -94,6 +96,27 @@ input, teleport, hit hooks, bookkeeping and rollback of temporary changes. **No 
 | `entry` | no | entry file, default `main.lua`, must be in this folder |
 | `needsFornet` | no | minimum host version, e.g. `0.3.0` |
 | `title` | no | name shown in the log |
+
+**Keys the lobby helper reads (0.4.0)**: the same `manifest.txt` can carry these; the lobby helper (`fornet_lobby.dll`) reads them at start-up and picks the adapter the same way the host does (first line of `games\games.txt`, otherwise the first folder by name). All optional:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mod_name` | `fornet` | Local name prefix: single-instance lock, the pipe to the game, UPnP mapping description, local file headers. Usually the mod folder name |
+| `process` | none = only this process | The game's process name (with or without `.exe`): the fallback exe checks whether the game is still running and finds the bridge pipe |
+| `game_zh` / `game_en` | `这个游戏` / `this game` | The game's name in messages |
+| `title_zh` / `title_en` | `4net 联机` / `4net online` | Window title (only the fallback exe has a window) |
+| `app_version` | `0.0.0` | Your mod's version, sent in the handshake; players are warned when the two sides differ. Keep it equal to your play mod's version |
+| `ranked_zh` / `ranked_long_zh` / `ranked_mode_zh` | `排位` / `排位` / `排位（经大厅服务器）` | What ranked play is called in messages |
+| `wire_server` / `wire_peer` / `wire_salt` / `wire_env` / `wire_abi` / `wire_pipe` | `4N` / `4N` / `fornet` / `FORNET_` / `fnx_` / `fornet_bridge_` | Wire names (see "Wire names" in section 2). Leave them out for a new game |
+| `save_dir` | none = no backup | Save folder: relative to the mod folder or absolute, `%ENV%` variables allowed. The save sits in it directly, or there is one sub-folder per account |
+| `save_file` | none = the whole folder | The save file's name; only with it is "skip when the save equals the last backup" checked |
+| `save_backup_dir` | `fornet-save-backups` | Folder under `save_dir` for the backups |
+
+Backups: before each match every account folder is zipped as `<account>-backup-<time>-mp.zip`; only those `-mp.zip` files are pruned (the latest
+20 are kept, then the last one of each day for 14 days, older ones deleted). Backups made by other tools are left alone.
+
+To check your manifest: run `FornetLobby-base.exe --print-game out.txt` from the mod folder; it writes what it read as `key=value`.
+Add `--backup-now` to also run one backup and write the result.
 
 Before running the entry the host sets the global `FORNET`:
 

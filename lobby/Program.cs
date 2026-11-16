@@ -5137,6 +5137,24 @@ namespace ForNet
             finally { WinTimer.End(); }
         }
 
+        // 0.4.0 --print-game：读到的游戏配置（GameInfo / WireTag）写成 key=value，给适配作者和测试核对
+        static int PrintGame(string path, bool backupNow)
+        {
+            var sb = new StringBuilder();
+            Action<string, string> kv = (k, v) => sb.Append(k).Append('=').Append(v ?? "").Append('\n');
+            kv("source", GameInfo.Source);
+            kv("mod_name", GameInfo.ModName); kv("process", GameInfo.ProcessName);
+            kv("game_zh", GameInfo.GameZh); kv("game_en", GameInfo.GameEn);
+            kv("title_zh", GameInfo.TitleZh); kv("title_en", GameInfo.TitleEn);
+            kv("app_version", GameInfo.AppVersion);
+            kv("ranked_zh", GameInfo.RankedZh); kv("ranked_long_zh", GameInfo.RankedLongZh); kv("ranked_mode_zh", GameInfo.RankedModeZh);
+            kv("wire_server", WireTag.S); kv("wire_peer", WireTag.P); kv("wire_salt", WireTag.Salt);
+            kv("wire_env", WireTag.EnvPrefix); kv("wire_abi", WireTag.Abi); kv("wire_pipe", WireTag.Pipe);
+            kv("backup", GameInfo.BackupSave != null ? "on" : "off");
+            if (backupNow && GameInfo.BackupSave != null) kv("backup_result", GameInfo.BackupSave());
+            try { File.WriteAllText(path, sb.ToString(), Kv.Utf8); return 0; } catch (Exception) { return 1; }
+        }
+
         internal static int Main2(string[] args)
         {
             string dir = Path.Combine(BaseDir, "net"), log = null, join = null, guiJoin = null, secret = null;
@@ -5144,6 +5162,8 @@ namespace ForNet
             bool host = false, backup = true, bg = false, probe = false, selfTest = false;
             ulong selfTarget = 0;
             double seconds = 0;
+            string printGame = null; bool backupNow = false;
+            GameInfo.Load(BaseDir);     // 0.4.0：游戏的名字 / 协议名 / 版本 / 存档备份先从适配 manifest 读（用到任何名字之前）
             if (WireTag.Env("DUEL_TEST") == "1") MpMesh.TestInject = true;
             for (int i = 0; i < args.Length; i++)
             {
@@ -5173,6 +5193,8 @@ namespace ForNet
                     case "--no-queue": SpecCfg.NoQueue = true; break;     // 测试：只观战、不排队
                     case "--seconds": seconds = double.Parse(args[++i], CultureInfo.InvariantCulture); break;
                     case "--dir": dir = args[++i]; break;
+                    case "--print-game": printGame = args[++i]; break;     // 0.4.0：把读到的游戏配置写进这个文件后退出（适配作者核对 manifest 用）
+                    case "--backup-now": backupNow = true; break;           // 0.4.0：和 --print-game 一起：按配置备份一次存档，结果写进同一个文件
                     case "--log": log = args[++i]; break;
                     case "--no-backup": backup = false; break;
                     case "--gui-join": guiJoin = args[++i]; break;
@@ -5196,6 +5218,7 @@ namespace ForNet
                     case "--client-port": Session.ClientBindPort = int.Parse(args[++i]); break;
                 }
             }
+            if (printGame != null) return PrintGame(printGame, backupNow);
             Directory.CreateDirectory(dir);
             Bridge.LogDir = dir;     // 桥接连接诊断 net\steam_conn.log
             L.Load(dir);

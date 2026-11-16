@@ -57,6 +57,7 @@ namespace ForNet
             try
             {
                 Program.BaseDir = dir;
+                GameInfo.Load(dir);         // 0.4.0：下面开锁就要用 ModName，先读适配 manifest
                 Program.InstanceSalt = "_p" + Environment.ProcessId;   // 锁 / 管道按游戏进程区分（沙盒双开）
                 NetLog.Build = "DLL（游戏进程里）";     // net_conn.log 里写
                 Safe.OnError = (where, ex) => err("[" + where + "] " + ex);

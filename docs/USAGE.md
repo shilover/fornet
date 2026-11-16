@@ -2,7 +2,7 @@
 
 [English](USAGE.en.md)
 
-写给"想用 4net 给某款 UE4SS 游戏做联机"的人。宿主版本 `0.3.0`。
+写给"想用 4net 给某款 UE4SS 游戏做联机"的人。宿主版本 `0.4.0`。
 
 > 现在仓库里**没有现成的示例游戏**（适配层 + 基础玩法 mod）：唯一在用的那款游戏的适配层不在这个仓库。
 > 下面写的是接口和约定；第一次接新游戏时，建议先只做"两边都看到对方的替身在动"，再往上加对局。
@@ -28,10 +28,12 @@ python -X utf8 -I tests\run_all.py
 
 `build_aot.bat` 用 `FORNET_DOTNET` 指定 `dotnet.exe`，不设就用 PATH 里的 `dotnet`。
 
-**游戏自己的 C#**（本地 AI 对手、游戏名、开局备份存档等）不放进基底：把 `.cs` 的绝对路径用分号连起来设进环境变量 `FORNET_GAME_CS`，
+**游戏名、进程名、版本号、协议名字、开局前备份存档**：0.4.0 起写在适配层的 `manifest.txt` 里（第 4 节），联机程序启动时读，**直接用编好的 `fornet_lobby.dll` 就行，不用自己编**。
+
+**游戏自己的 C# 代码**（本地 AI 对手这类）才要自己编、不放进基底：把 `.cs` 的绝对路径用分号连起来设进环境变量 `FORNET_GAME_CS`，
 `build.bat` 和 AOT 工程都会把它们编进同一个程序集。在里面实现 partial 方法：
 
-- `GameInfo.Configure`：`ModName / TitleZh / TitleEn / GameZh / GameEn / ProcessName / BackupSave`
+- `GameInfo.Configure`：`ModName / TitleZh / TitleEn / GameZh / GameEn / ProcessName / AppVersion / BackupSave`（编译时给的写法，0.4.0 前只有这种；和 manifest 都给时编进去的优先）
 - `LocalAiSupport.Register(ref ILocalAiImpl)`：本地 AI（不实现就没有本地 AI）
 - `WireTag.Configure`：协议名字（见下）
 
@@ -43,7 +45,7 @@ python -X utf8 -I tests\run_all.py
 
 线上的包里有几个名字：大厅服务器控制包的标记（`4N|REG|…`）、对端控制包的前缀（`4NHELLO`、`4NEV`、转发头 `4NR|` …）、
 房间标记哈希的盐、测试用环境变量的前缀（`FORNET_`）、联机程序插件导出名的前缀（`fnx_`）、桥接管道名的前缀（`fornet_bridge_`）。
-默认都是 4net 的中性名，在 `lobby/WireTag.cs`。**新游戏用默认值就行。**
+默认都是 4net 的中性名，在 `lobby/WireTag.cs`。**新游戏用默认值就行。**0.4.0 起也可以写在适配层 manifest 的 `wire_*` 键里（第 4 节），不用编。
 
 已经有玩家在用另一套名字的游戏（比如先有了自己的联机模组、后来才换到 4net），在 `WireTag.Configure` 里把这几样设回原来的，
 线上格式就一个字节都不变，已装的旧版本和已经在跑的服务器照旧能连：
@@ -90,6 +92,26 @@ static partial class WireTag
 | `entry` | 否 | 入口，默认 `main.lua`，只能是本目录下的文件 |
 | `needsFornet` | 否 | 宿主版本下限，比如 `0.3.0` |
 | `title` | 否 | 日志里显示的名字 |
+
+**联机程序读的键（0.4.0）**：同一个 `manifest.txt` 里还可以写下面这些，联机程序（`fornet_lobby.dll`）启动时读，选哪个适配层和宿主一样（`games\games.txt` 第一行，没有就按目录名排第一个）。都可选，不写就是默认值：
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `mod_name` | `fornet` | 本地名字前缀：单实例锁、和游戏之间的管道、UPnP 映射描述、本地文件头。一般写模组目录名 |
+| `process` | 不写 = 只认本进程 | 游戏进程名（`.exe` 可写可不写）：退路 exe 看游戏还开着没有、找桥接管道 |
+| `game_zh` / `game_en` | `这个游戏` / `this game` | 提示文字里的游戏名 |
+| `title_zh` / `title_en` | `4net 联机` / `4net online` | 联机窗口标题（只有退路 exe 有窗口） |
+| `app_version` | `0.0.0` | 模组版本号，握手时发给对方，两边不一样就提示；和玩法 mod 的版本保持一致 |
+| `ranked_zh` / `ranked_long_zh` / `ranked_mode_zh` | `排位` / `排位` / `排位（经大厅服务器）` | 提示文字里排位方式的叫法 |
+| `wire_server` / `wire_peer` / `wire_salt` / `wire_env` / `wire_abi` / `wire_pipe` | `4N` / `4N` / `fornet` / `FORNET_` / `fnx_` / `fornet_bridge_` | 协议名字（见第 2 节"协议名字"）。新游戏不写 |
+| `save_dir` | 不写 = 不备份 | 存档目录：相对模组目录或绝对路径，可以带 `%环境变量%`。存档直接在里面，或者每个账号一个子目录 |
+| `save_file` | 不写 = 整个目录 | 存档文件名；写了才会"存档和上一个备份一样就不再备份" |
+| `save_backup_dir` | `fornet-save-backups` | 备份放在 `save_dir` 下哪个目录 |
+
+备份规则：每局开始前把每个账号目录打成 `<账号>-backup-<时间>-mp.zip`；只清自己打的 `-mp.zip`（最近 20 个全留，14 天内每天留最后一个，更早的删），
+别的工具打的备份不碰。
+
+核对写对没有：`FornetLobby-base.exe --print-game 输出.txt`（exe 放在模组目录里跑）把读到的值写成 `键=值`；加 `--backup-now` 顺便备份一次、结果也写进去。
 
 宿主执行入口前设好全局 `FORNET`：
 
