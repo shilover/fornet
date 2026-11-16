@@ -1,4 +1,4 @@
-# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_server_lobby.py
+# 4net 自带测试：路径以本目录的上一级（仓库根）为根。
 # 服务器大厅（mode=server）离线测试：本地起服务端 fornet/server/fornet-lobby-server.mjs + 两个后台联机程序实例（各用自己的 --dir），
 # 不开游戏、不碰 27015 / 27016（服务器大厅的游戏端口是系统随机分配的）。
 # python -I test_server_lobby.py <FornetLobby.exe> <工作目录> [服务器端口，默认 27120 | 外部服务器 域名:端口]

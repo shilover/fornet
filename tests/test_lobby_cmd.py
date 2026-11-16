@@ -1,4 +1,4 @@
-# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_lobby_cmd.py
+# 4net 自带测试：路径以本目录的上一级（仓库根）为根。
 # 联机窗口的命令通道（net-ui）：两个后台 exe 实例，靠 cmd.txt 让 A 建房、B 加入，查 lobby.txt / session.txt / state_remote.txt。
 # 不开游戏；两个实例各用自己的 --dir，互不影响。
 # python -I test_lobby_cmd.py <FornetLobby.exe> <工作目录> [模式 direct|lan] [端口]

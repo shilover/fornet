@@ -1,4 +1,4 @@
-# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_ext.py
+# 4net 自带测试：路径以本目录的上一级（仓库根）为根。
 # X1 扩展包（fornet/lua/fornet_ext.lua，F5 前叫 game_ext.lua）：lupa 加载真的模块，基底部分用桩。 / EXTENSIONS_API.md
 # 用法：python -X utf8 -I test_ext.py <lupa 目录>
 import os, shutil, sys, tempfile
@@ -80,7 +80,7 @@ apiver = int(re.search(r"API_VER = (\d+)", src).group(1))
 csv = int(re.search(r"public const int ApiVersion = (\d+);", open(os.path.join(REPO, "lobby", "Ext.cs"), encoding="utf-8").read()).group(1))
 check(csv == apiver, "Lua fornet_ext.lua API_VER = C# Ext.cs ApiVersion（两边一起升）", "Lua %d / C# %d" % (apiver, csv))
 check("an > ApiVersion" in open(os.path.join(REPO, "lobby", "Ext.cs"), encoding="utf-8").read(), "C# 侧也按 manifest api= 拒装比自己新的插件")
-for pk in ("steam", "ranked"):     # 私有库里才有这两个包（fornet 仓库没有，跳过）
+for pk in ("steam", "ranked"):     # 游戏自己的插件包（单独的 4net 仓库里没有，跳过）
     _mf = os.path.join(REPO, "..", "mod", "<mod>", "ext", pk, "manifest.txt")
     if not os.path.exists(_mf): continue
     mf = open(_mf, encoding="utf-8").read()

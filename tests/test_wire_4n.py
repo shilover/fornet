@@ -1,4 +1,4 @@
-# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_wire_4n.py
+# 4net 自带测试：路径以本目录的上一级（仓库根）为根。
 # F1：服务端双认控制包前缀 `4N|`（fornet）和 `4N|`（0.3x 客户端），回包用对方来时的前缀。
 # python -I test_wire_4n.py （起本地服务端 27161，不碰别的端口）
 import os, socket, subprocess, sys, time

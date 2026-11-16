@@ -1,5 +1,5 @@
 @echo off
-rem build the sample lobby plugin lobby_hello.dll (same LLVM toolchain as inproc\build.bat, no CRT)
+rem build the sample lobby plugin lobby_hello.dll (LLVM toolchain, no CRT)
 setlocal
 cd /d "%~dp0"
 set "LLVM=%LLVM_DIR%"

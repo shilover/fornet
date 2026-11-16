@@ -734,7 +734,7 @@ function sockFor(to, fam) {
 let ranked = null;
 if (RANKED_FILE) {
     try {
-        // F5：排位模块不在基底仓库里（私有库 exts/ranked/server/）；默认还是和本文件同目录（线上部署就是这样放的），--ranked-module 可指定别处
+        // 排位模块不在 4net 里，由游戏自己提供；默认还是和本文件同目录（线上部署就是这样放的），--ranked-module 可指定别处
         const rmod = arg('--ranked-module', process.env.RANKED_MODULE || '');
         const { createRanked } = await import(rmod ? (await import('node:url')).pathToFileURL(path.resolve(rmod)).href : WIRE_DEFAULTS.ranked);
         ranked = createRanked({ file: RANKED_FILE, log, send, webDir: arg('--web', process.env.RANKED_WEB || ''), cfgFile: arg('--ranked-cfg', process.env.RANKED_CFG || '') });

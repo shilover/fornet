@@ -1,4 +1,4 @@
-# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_fornet_host.py
+# 4net 自带测试：路径以本目录的上一级（仓库根）为根。
 # F6 fornet 宿主（fornet/lua/fornet_host.lua → 部署成 <模组>\Scripts\main.lua）：lupa 跑真的宿主，假模组目录里放游戏适件。
 # 用法：python -X utf8 -I test_fornet_host.py <lupa 目录>
 # ① 找到 games\demo\，执行适件入口，FORNET.ROOT / GAME_DIR / SCRIPTS 对；适件能 require 自己目录的模块和 Scripts\ 的 fornet_*
@@ -87,7 +87,7 @@ lua, log = run(mkmod({"demo": ("name=demo\n", {"main.lua": "RAN = 1\nerror('boom
 check(lua.eval("RAN") == 1 and "运行出错" in log and "boom" in log, "③ 入口报错：记日志、不抛出", log)
 
 # ④ 真 main.lua 开头（到 FORNET 那行）
-_main = os.path.join(REPO, "..", "mod", "<mod>", "Scripts", "main.lua")     # 私有库里才有那个游戏适件（fornet 仓库跳过 ④）
+_main = os.path.join(REPO, "..", "mod", "<mod>", "Scripts", "main.lua")     # 装在游戏 mod 里时才有游戏适配层（单独的 4net 仓库里没有，跳过）
 src = open(_main, encoding="utf-8").read() if os.path.exists(_main) else None
 head = src[:src.index("\n", src.index("if type(FORNET) ~= \"table\" then FORNET")) + 1] if src else None
 hroot = mkmod({}, None)

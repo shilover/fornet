@@ -1,4 +1,4 @@
-# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根。原件：私有库 tests/test_consent_gate.py（去掉了本地 AI 一段）
+# 4net 自带测试：路径以本目录的上一级（仓库根）为根。
 # 问题 A：联机程序层的同意兜底（Program.ConsentGate）。真的 FornetLobby.exe，不加 --consent-all。
 # python -I test_consent_gate.py <FornetLobby.exe> <工作目录>
 # ① mode=server、rules.txt 只有 consent_play：cmd host → 不开会话（lobby.txt 没 route）、err 含"要先同意"、net_conn.log 有"同意兜底：拒绝 host（缺 consent_server）"
@@ -73,7 +73,7 @@ finally:
     except Exception: pass
     time.sleep(0.5)
 
-# ⑤ 本地 AI 那段属于游戏适配（基底没有本地 AI），留在私有库的 tests/test_consent_gate.py
+# ⑤ 本地 AI 那段属于游戏适配（基底没有本地 AI），由用 4net 的游戏自己测
 
 print("共 %d 项失败" % len(fails))
 sys.exit(1 if fails else 0)
