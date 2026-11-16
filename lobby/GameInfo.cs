@@ -10,6 +10,7 @@ namespace ForNet
         public static string ModName = "fornet";                    // 本地名字前缀：互斥锁 / 和游戏的管道 / UPnP 映射描述 / 本地文件头
         public static string TitleZh = "4net 联机", TitleEn = "4net online";     // 联机窗口标题（exe 版才有窗口）
         public static string GameZh = "这个游戏", GameEn = "this game";         // 提示文字里的游戏名
+        public static string AppVersion = "0.0.0";                  // 游戏模组的版本号（和它 Lua 那边的版本一致）：握手时发给对方，两边不一样就提示
         public static string ProcessName = null;                    // 游戏进程名（不带 .exe）：exe 后台模式看游戏还在不在、找桥接管道；null = 只认本进程
         public static Func<string> BackupSave = null;
         public static string RankedZh = "排位", RankedLongZh = "排位", RankedModeZh = "排位（经大厅服务器）";     // 排位方式的中文名（提示文字里用；游戏可以起自己的名字）               // 每局开始前备份存档，返回给日志的一句话；null = 不备份

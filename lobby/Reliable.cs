@@ -28,7 +28,7 @@ namespace ForNet
     {
         // 联机程序之间的协议版本：1 = v0.20.x 及以前（状态包里没有 pv=）；2 = v0.22.0 起（可靠事件 + 签名）
         public const int Version = 2;
-        public const string App = "0.34.1";        // 和 main.lua 的 VERSION 一致
+        public static string App { get { return GameInfo.AppVersion; } }     // 游戏模组的版本（握手 av= 里发给对方，对不上时提示）；由游戏在 GameInfo.Configure 里给
         public const double MaxSkewSec = 120.0;    // 签名时间戳和本机时钟最多差 2 分钟
     }
 

@@ -127,7 +127,7 @@ namespace ForNet
             if (d.TryGetValue("bridgeupms", out v) && int.TryParse(v, out n) && n >= 0 && n <= 2000) BridgeUpMs = n;
             SyncMeshPrefs();     // 多人房桥接自动择优（MpMesh / BridgeUp）和旧 1v1 共用 bridgeup / bridgeupms
             int lv;
-            if (d.TryGetValue("ailevel", out v) && int.TryParse(v, out lv) && lv >= 0 && lv <= 2) AiLevel = lv;
+            if (d.TryGetValue("ailevel", out v) && int.TryParse(v, out lv) && lv >= 0 && lv < Math.Max(3, LocalAiSupport.LevelCount)) AiLevel = lv;     // 游戏的本地 AI 可以有 3 档以上（以前只认 0–2，第 4 档重启后变回第 1 档）
             foreach (var kv in d) AiLoad.LoadCfg(kv.Key, kv.Value);     // F5：AI 装备的键归游戏适配（LocalAiApi.cs）
             if (d.TryGetValue("airoom", out v)) AiRoom = v == "1";
             if (d.TryGetValue("airoommode", out v)) AiRoomMode = Modes.ValidRoom(v);
