@@ -1,8 +1,8 @@
-# fornet 仓库自带测试（11-13 测试分家，HANDOVER §274）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_history.py
-# 0.34 "最近一起玩过的人"（TASK_0.34 §3.1，HANDOVER §250.6）：两个联机程序经服务器大厅直连 50 秒 → 两边 net\history.txt 各一条
-# （bh = 对方安装号哈希、昵称、src=server，没有 SteamID / IP），lobby.txt hn=1 / h1 对得上；对方再开房时 h1 带可加入的目标；
+# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_history.py
+# 0.34 "最近一起玩过的人"：两个联机程序经服务器大厅直连 50 秒 → 两边 net\history.txt 各一条
+# （bh = 对方安装号哈希、昵称、src=server，没有平台账号 ID / IP），lobby.txt hn=1 / h1 对得上；对方再开房时 h1 带可加入的目标；
 # cmd=clearhist 清掉；hide=1 时登记不带主机标记（服务器列表第 10 列空）→ 对方的历史里对不上
-#   python -X utf8 -I tests/test_history.py <FornetLobby.exe> <工作目录> [服务器端口，默认 27170]
+# python -X utf8 -I tests/test_history.py <FornetLobby.exe> <工作目录> [服务器端口，默认 27170]
 import hashlib, os, re, socket, subprocess, sys, threading, time
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -129,7 +129,7 @@ try:
     ha = read(os.path.join(A, "history.txt"))
     check("乙的 history.txt 有甲：bh = 甲安装号的哈希、昵称、src=server", ("bh=" + h12("fornet-room|" + uidA)) in hb and "nm=甲方" in hb and "src=server" in hb, hb)
     check("甲的 history.txt 有乙", ("bh=" + h12("fornet-room|" + uidB)) in ha and "nm=乙方" in ha, ha)
-    check("history.txt 里没有 IP、没有 SteamID 明文", "127.0.0.1" not in hb and "7656" not in hb and "ip=" not in hb and "sid=" not in hb, hb)
+    check("history.txt 里没有 IP、没有平台账号 ID 明文", "127.0.0.1" not in hb and "7656" not in hb and "ip=" not in hb and "sid=" not in hb, hb)
     lb = kv(os.path.join(B, "lobby.txt"))
     check("乙的 lobby.txt hn=1、h1 = hist|server|<时间>|甲方|<目标>（连着时甲的房已满 → 目标 -）", lb.get("hn") == "1" and re.match(r"^hist\|server\|\d+\|甲方\|", lb.get("h1", "")) is not None, lb.get("h1"))
     write(os.path.join(B, "cmd.txt"), "id=b2\ncmd=stop\n")

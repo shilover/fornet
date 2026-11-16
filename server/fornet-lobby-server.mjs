@@ -2,87 +2,87 @@
 // 只用 Node 自带的 dgram，一个 UDP 端口干全部的事；不存盘，重启后房间由主机的心跳（每 2 秒一次）自己补回来。
 // 许可证 AGPL-3.0（见 server/LICENSE），不提供任何担保。架这台服务器的人是服务运营者，自己负责当地合规（server/README.md）。
 //
-//   node server/fornet-lobby-server.mjs [--port 27020] [--host ::] [--relay] [--quiet] [--upstream 域名或IP:端口 …]
-//   环境变量 PORT / HOST / RELAY=1 也行。--upstream 可以写多个（HANDOVER §50 服务器互通）。
-//   §327 默认 --host :: 双栈（IPv4 + IPv6 一个端口）；--host 0.0.0.0 = 只听 IPv4（旧行为）；--host 可写多个（逗号分开），
-//   机器有好几个公网 IPv6 时写 --host 0.0.0.0,<AAAA 指向的那个 IPv6>（见 socks 那段）。
-//   0.34：--relay-watch 只转观战流、不转对局（测试服务器上用这个）；--relay-match 只转对局；--relay 两个都开。REG 第 16 段 = 1 表示"对局走 Steam"，
-//   那种房服务器只把双方 SteamID 互相介绍一次（PEER 第 7 段），不打洞不中转；房间列表第 11 列 = 1 标出来。
-//   --room 1v1|mp 开服务器自己开的房（§240/§241）：鉴权 / 限速参数 --srate-state / --srate-relay / --srate-chat /
-//   --srate-pick / --srate-report / --srate-join / --srate-srelay / --smax-packet / --sban-drops / --sban-window / --sban-sec
-//   （默认值见 server/README.md；只作用于服务器房，普通大厅 / 排位 / 观战老协议不变）。
-//   --relay：打洞不通时替双方转发状态包。默认关：中转是服务器几乎全部的带宽（每对玩家约 50 KB/秒），
-//   关着时服务器只登记房间、介绍地址，客机请求中转会收到 ERR …|norelay。
+// node server/fornet-lobby-server.mjs [--port 27020] [--host ::] [--relay] [--quiet] [--upstream 域名或IP:端口 …]
+// 环境变量 PORT / HOST / RELAY=1 也行。--upstream 可以写多个（服务器互通）。
+// 默认 --host :: 双栈（IPv4 + IPv6 一个端口）；--host 0.0.0.0 = 只听 IPv4（旧行为）；--host 可写多个（逗号分开），
+// 机器有好几个公网 IPv6 时写 --host 0.0.0.0,<AAAA 指向的那个 IPv6>（见 socks 那段）。
+// 0.34：--relay-watch 只转观战流、不转对局（测试服务器上用这个）；--relay-match 只转对局；--relay 两个都开。REG 第 16 段 = 1 表示"对局走桥接平台"，
+// 那种房服务器只把双方平台账号 ID互相介绍一次（PEER 第 7 段），不打洞不中转；房间列表第 11 列 = 1 标出来。
+// --room 1v1|mp 开服务器自己开的房：鉴权 / 限速参数 --srate-state / --srate-relay / --srate-chat /
+// --srate-pick / --srate-report / --srate-join / --srate-srelay / --smax-packet / --sban-drops / --sban-window / --sban-sec
+// （默认值见 server/README.md；只作用于服务器房，普通大厅 / 排位 / 观战老协议不变）。
+// --relay：打洞不通时替双方转发状态包。默认关：中转是服务器几乎全部的带宽（每对玩家约 50 KB/秒），
+// 关着时服务器只登记房间、介绍地址，客机请求中转会收到 ERR …|norelay。
 //
 // 协议（文本，一个 UDP 包一条；字段用 | 分开，服务器收到的字段里的 | \t \n 都会被替换掉）：
-//   主机 → 4N|REG|<密钥>|<名字>|<地图>|<已满 0/1>|<局域网地址 IP:端口>|<允许中转 0/1>[|<排位 0/1>|<主机 pid>]   每 2 秒；10 秒没收到就删房间
-//        （第 7 段旧版联机程序不发，当允许；主机发 0 时这个房间的会话一律不中转。第 8、9 段 = 武林盟主排位房间，HANDOVER §110：
-//         服务器没开 --ranked → ERR|-|noranked，主机 pid 没登记 → ERR|-|unknown，都不登记；
-//         §135 第 10 段 = 主机的 SteamID：排位对局只走 Steam，服务器只管登记 / 介绍 / 记分，不打洞、不中转）
-//        （§284 多人房的第 16 段固定发 0（不走桥接，多人房一律直连）；第 17 段 = 多人房人数上限 mpMax，0 / 不发 = 1v1；第 18 段 = 当前人数 mpCur；第 19 段 = 标签 mpTag，如 m=elim;tm=0;st=idle）
-//        ← 4N|REGOK|<房间号>|<你的公网地址>
-//   主机 → 4N|UNREG|<密钥>
-//   任何 → 4N|LIST                     ← 4N|ROOMS\n<房间号>\t<名字>\t<地图>\t<已满>\t<所在服务器>\t<排位 0/1>\t<称号>\t<能观战>\t<AI对打>\t<主机标记>\t<对局走Steam>\t<多人信息>\n…（最多 40 个；
-//                                           所在服务器为空 = 就是这台，否则是别的服务器的 IP:端口，加入要去那台；盟主开的房间排最前；第 12 列 = <cur>/<max>[;<tags>]，1v1 房为空）
-//   任何 → 4N|PING                     ← 4N|PONG|<你的公网地址>
-//   客机 → 4N|JOIN|<房间号>|<局域网地址>[|<客机 pid>|<客机 SteamID>]  → 客机 4N|PEER|<房间号>|<会话号>|<主机公网>|<主机局域网>
-//                                         → 主机 4N|PEER|<房间号>|<会话号>|<客机公网>|<客机局域网>
-//                                         ← 出错 4N|ERR|<房间号>|nofound / full / ranked（排位房间，客机没带登记过的 pid）
-//                                           / needsteam（排位房间走 Steam，客机没带 SteamID）/ oldhost（主机是旧版、没带 SteamID）
-//                                         排位房间的 PEER 多第 7 段 = 对方的 SteamID（§135）
-//                                         §327 PEER 第 8 段 = 对方另一族的地址（IPv4 / IPv6，对方用 ALT 报过才有；第 7 段这时可以是空的）
-//   §327 双栈：端点写法 IPv4 = a.b.c.d:端口、IPv6 = [地址]:端口（PONG / REGOK / PEER / 列表"所在服务器" / PUSHOK 都是）。
-//   主机 → 4N|ALT|h|<密钥>、客机 → 4N|ALT|c|<会话号>：从另一族再报一次自己，← 4N|ALTOK|<h/c>|<看到的地址>
-//   客机 → 4N|RELAY|<会话号>             ← 4N|RELAYOK|<会话号>；同时发给主机 4N|RELAYON|<会话号>
-//                                         ← 没开 --relay 时 4N|ERR|<会话号>|norelay；主机不允许中转时 …|hostnorelay
-//   双方 → 4NR|<会话号>\n<原样的状态包>    服务器按来源转给会话的另一方（包原样转发，带着这个头）
-//   §141 观战（要开 --relay；主机 REG 第 12 段 = 1 表示认观战，列表第 8 列 = 能观战）：
-//   观战者 → 4N|WATCH|<房间号>           每 2 秒（保活）  ← 4N|WATCHOK|<房间号>|<观战人数>
-//                                         ← 出错 4N|ERR|<房间号>|nofound / nowatch（主机是旧版）/ ranked / norelay / watchfull
-//   观战者 → 4N|UNWATCH|<房间号>
-//   主机   → 4NW|<房间号>\n<签过名的状态包（带 src=h / src=c）>   服务器原样（带着这个头）发给这个房间每个观战者；没人观战时主机不发
-//   主机的 REGOK 第 5 段 = 现在的观战人数（主机靠它决定发不发）
-//   §141.7 排队：观战者按先来后到排队（WATCHOK 第 5 段 = 排第几；WATCH 第 4 段 = down 表示"刚下场的"，先不叫它上场；
-//   第 5 段 = noq 表示只观战、不排队：不叫它上场、不挑它当第二位、排第几报 0）。
-//   房间有过对手、现在没满（对手走了 / 被主机换下）→ 服务器给队首发 4N|YOURTURN|<房间号>|<口令>（15 秒内每 2 秒重发），
-//   这段时间别人 JOIN 一律 full，队首拿口令 JOIN（第 7 段）才放行
-//   §141.8 主机下场（第二位选手经服务器转发）：主机 → 4N|HOSTDOWN|<密钥>：服务器挑队首（跳过刚下场的）当第二位，
-//   给它发 4N|SECOND|<房间号>|1；主机 → 4N|HOSTUP|<密钥>：取消，给第二位发 4N|SECOND|<房间号>|0（回去观战）。
-//   主机的 REGOK 第 6 段 = 有没有第二位。第二位 → 4NV|<房间号>\n<包> 服务器转给主机；主机 → 4NU|<房间号>\n<包> 服务器转给第二位。
-//   §223.4 观战者 WATCH 第 6 段 = dz 表示会拼省流观战包；主机的 REGOK 第 7 段 = 现在的观战者都会拼（1）/ 不是（0）：
-//   主机据此给观战发省流包还是完整包（旧服务器没有第 7 段 = 主机发完整包）。
-//   第二位不再收观战包（4NW）
+// 主机 → 4N|REG|<密钥>|<名字>|<地图>|<已满 0/1>|<局域网地址 IP:端口>|<允许中转 0/1>[|<排位 0/1>|<主机 pid>] 每 2 秒；10 秒没收到就删房间
+// （第 7 段旧版联机程序不发，当允许；主机发 0 时这个房间的会话一律不中转。第 8、9 段 = 排位排位房间，：
+// 服务器没开 --ranked → ERR|-|noranked，主机 pid 没登记 → ERR|-|unknown，都不登记；
+// 第 10 段 = 主机的平台账号 ID：排位对局只走桥接平台，服务器只管登记 / 介绍 / 记分，不打洞、不中转）
+// （多人房的第 16 段固定发 0（不走桥接，多人房一律直连）；第 17 段 = 多人房人数上限 mpMax，0 / 不发 = 1v1；第 18 段 = 当前人数 mpCur；第 19 段 = 标签 mpTag，如 m=elim;tm=0;st=idle）
+// ← 4N|REGOK|<房间号>|<你的公网地址>
+// 主机 → 4N|UNREG|<密钥>
+// 任何 → 4N|LIST ← 4N|ROOMS\n<房间号>\t<名字>\t<地图>\t<已满>\t<所在服务器>\t<排位 0/1>\t<称号>\t<能观战>\t<AI对打>\t<主机标记>\t<对局走桥接>\t<多人信息>\n…（最多 40 个；
+// 所在服务器为空 = 就是这台，否则是别的服务器的 IP:端口，加入要去那台；盟主开的房间排最前；第 12 列 = <cur>/<max>[;<tags>]，1v1 房为空）
+// 任何 → 4N|PING ← 4N|PONG|<你的公网地址>
+// 客机 → 4N|JOIN|<房间号>|<局域网地址>[|<客机 pid>|<客机平台账号 ID>] → 客机 4N|PEER|<房间号>|<会话号>|<主机公网>|<主机局域网>
+// → 主机 4N|PEER|<房间号>|<会话号>|<客机公网>|<客机局域网>
+// ← 出错 4N|ERR|<房间号>|nofound / full / ranked（排位房间，客机没带登记过的 pid）
+//                                           / needsteam（排位房间走桥接平台，客机没带平台账号 ID）/ oldhost（主机是旧版、没带平台账号 ID）
+// 排位房间的 PEER 多第 7 段 = 对方的平台账号 ID
+// PEER 第 8 段 = 对方另一族的地址（IPv4 / IPv6，对方用 ALT 报过才有；第 7 段这时可以是空的）
+// 双栈：端点写法 IPv4 = a.b.c.d:端口、IPv6 = [地址]:端口（PONG / REGOK / PEER / 列表"所在服务器" / PUSHOK 都是）。
+// 主机 → 4N|ALT|h|<密钥>、客机 → 4N|ALT|c|<会话号>：从另一族再报一次自己，← 4N|ALTOK|<h/c>|<看到的地址>
+// 客机 → 4N|RELAY|<会话号> ← 4N|RELAYOK|<会话号>；同时发给主机 4N|RELAYON|<会话号>
+// ← 没开 --relay 时 4N|ERR|<会话号>|norelay；主机不允许中转时 …|hostnorelay
+// 双方 → 4NR|<会话号>\n<原样的状态包> 服务器按来源转给会话的另一方（包原样转发，带着这个头）
+// 观战（要开 --relay；主机 REG 第 12 段 = 1 表示认观战，列表第 8 列 = 能观战）：
+// 观战者 → 4N|WATCH|<房间号> 每 2 秒（保活） ← 4N|WATCHOK|<房间号>|<观战人数>
+// ← 出错 4N|ERR|<房间号>|nofound / nowatch（主机是旧版）/ ranked / norelay / watchfull
+// 观战者 → 4N|UNWATCH|<房间号>
+// 主机 → 4NW|<房间号>\n<签过名的状态包（带 src=h / src=c）> 服务器原样（带着这个头）发给这个房间每个观战者；没人观战时主机不发
+// 主机的 REGOK 第 5 段 = 现在的观战人数（主机靠它决定发不发）
+// 排队：观战者按先来后到排队（WATCHOK 第 5 段 = 排第几；WATCH 第 4 段 = down 表示"刚下场的"，先不叫它上场；
+// 第 5 段 = noq 表示只观战、不排队：不叫它上场、不挑它当第二位、排第几报 0）。
+// 房间有过对手、现在没满（对手走了 / 被主机换下）→ 服务器给队首发 4N|YOURTURN|<房间号>|<口令>（15 秒内每 2 秒重发），
+// 这段时间别人 JOIN 一律 full，队首拿口令 JOIN（第 7 段）才放行
+// 主机下场（第二位选手经服务器转发）：主机 → 4N|HOSTDOWN|<密钥>：服务器挑队首（跳过刚下场的）当第二位，
+// 给它发 4N|SECOND|<房间号>|1；主机 → 4N|HOSTUP|<密钥>：取消，给第二位发 4N|SECOND|<房间号>|0（回去观战）。
+// 主机的 REGOK 第 6 段 = 有没有第二位。第二位 → 4NV|<房间号>\n<包> 服务器转给主机；主机 → 4NU|<房间号>\n<包> 服务器转给第二位。
+// 观战者 WATCH 第 6 段 = dz 表示会拼省流观战包；主机的 REGOK 第 7 段 = 现在的观战者都会拼（1）/ 不是（0）：
+// 主机据此给观战发省流包还是完整包（旧服务器没有第 7 段 = 主机发完整包）。
+// 第二位不再收观战包（4NW）
 // 主机 / 客机的 REG、JOIN、4NR 都从各自的"游戏 UDP 端口"发出，这样服务器看到的就是 NAT 给游戏端口分配的公网地址，
 // 告诉对方后双方往这个地址互发包（打洞）。打洞不通时客机发 RELAY，之后两边的状态包都经服务器转发。
 //
-// §240 服务器自己开的房（--room 1v1|mp，默认关）：SHOST / SMHOST / SRULES / SROLE / SROSTER / SMESH / SCHAT / SMPM / SSCORE /
-//   SPICKED / SPICKERR / SRELAYOK / SRELAYIN / SSTATE / SREPORT / SRELAY / SRLY / SLEAVE（详见 docs/HANDOVER.md §240）。
-// §283 SMHOST|<对局主机编号>（0 = 没有；多人服务器房由第一位玩家当对局主机，进房/退房/超时变动时下发）。
-// §241 鉴权 / 限速（只作用于服务器房）：玩家 JOIN 后服务器发 4N|SHOST|房间|编号|人数|1v1/mp|<会话口令>；
-//   之后 4N|SSTATE|编号|口令\n<包>、4N|SRLY|对方编号|口令\n<包>、4N|SRELAY|对方编号|口令、
-//   4N|SREPORT|编号|口令|<k=v;…>、4N|SCHAT|口令|<文字>、4N|SLEAVE|口令。
-//   口令对不上 / 来源端点变了（JOIN 第 6 段带旧口令重新握手才算）→ 丢弃并计数；超过每秒上限 → 丢弃，
-//   持续超限临时拉黑。--srate-* / --smax-packet / --sban-* 调数值。旧版联机程序不进服务器房，老协议不变。
+// 服务器自己开的房（--room 1v1|mp，默认关）：SHOST / SMHOST / SRULES / SROLE / SROSTER / S / SCHAT / SMPM / SSCORE /
+// SPICKED / SPICKERR / SRELAYOK / SRELAYIN / SSTATE / SREPORT / SRELAY / SRLY / SLEAVE（详见）。
+// SMHOST|<对局主机编号>（0 = 没有；多人服务器房由第一位玩家当对局主机，进房/退房/超时变动时下发）。
+// 鉴权 / 限速（只作用于服务器房）：玩家 JOIN 后服务器发 4N|SHOST|房间|编号|人数|1v1/mp|<会话口令>；
+// 之后 4N|SSTATE|编号|口令\n<包>、4N|SRLY|对方编号|口令\n<包>、4N|SRELAY|对方编号|口令、
+// 4N|SREPORT|编号|口令|<k=v;…>、4N|SCHAT|口令|<文字>、4N|SLEAVE|口令。
+// 口令对不上 / 来源端点变了（JOIN 第 6 段带旧口令重新握手才算）→ 丢弃并计数；超过每秒上限 → 丢弃，
+// 持续超限临时拉黑。--srate-* / --smax-packet / --sban-* 调数值。旧版联机程序不进服务器房，老协议不变。
 //
 // 服务器互通（只要一边配置）：A 用 --upstream 指向 B，A 每 2 秒
-//   → B  4N|PUSH\n<房间号>\t<名字>\t<地图>\t<已满>\n…   只推 A 自己登记的房间（每包最多 6 个）；B 不用配 A：像收主机登记一样收下，
-//                                                       所在服务器 = 包的来源地址，10 秒没再推就删
-//      ← 4N|PUSHOK|<A 的公网地址>                       A 由此知道 B 眼里的自己是谁
-//   → B  4N|LIST，像客户端一样拿 B 的列表（B 自己的 + 别人推给 B 的），跳过所在服务器是 A 自己的，存下来 10 秒
+// → B 4N|PUSH\n<房间号>\t<名字>\t<地图>\t<已满>\n… 只推 A 自己登记的房间（每包最多 6 个）；B 不用配 A：像收主机登记一样收下，
+// 所在服务器 = 包的来源地址，10 秒没再推就删
+// ← 4N|PUSHOK|<A 的公网地址> A 由此知道 B 眼里的自己是谁
+// → B 4N|LIST，像客户端一样拿 B 的列表（B 自己的 + 别人推给 B 的），跳过所在服务器是 A 自己的，存下来 10 秒
 // 两边的玩家都能看到对方的房间；加入别的服务器的房间时，客机直接去那台服务器 JOIN（主机的 NAT 口子只开给它自己那台）。
 // 排位房间不推（排位只在本服务器内算）。
 //
-// --ranked <数据文件>：开武林盟主排位（账号、上报、Elo、排行榜；协议见 fornet-ranked.mjs 文件头，HANDOVER §110）。
-// --web <目录>：再把排行榜 + 武器 / 招式统计写成静态网页（index.html + ranked.json，每分钟有变化才写，§110.11）。
-// --cfg <文件>：数值表（标准数值基准 + 武器平衡，一行，客户端 tools/cfg_export.py 导出；HANDOVER §158）。文件改了自动重读（5 秒看一次）。
-//   任何 → 4N|CFGQ|<我有的哈希或 ->   ← 4N|CFG|<哈希>|<第几块>|<共几块>|<内容>（每块 ≤ 900 字节，内容里本来就有 |，客户端只按前 5 个 | 切）
-//                                       ← 已经是最新：4N|CFG|<哈希>|0|0|     没给 --cfg：4N|CFG|-|0|0|
+// --ranked <数据文件>：开排位排位（账号、上报、Elo、排行榜；协议见 fornet-ranked.mjs 文件头）。
+// --web <目录>：再把排行榜 + 武器 / 招式统计写成静态网页（index.html + ranked.json，每分钟有变化才写）。
+// --cfg <文件>：数值表（标准数值基准 + 武器平衡，一行，客户端 tools/cfg_export.py 导出）。文件改了自动重读（5 秒看一次）。
+// 任何 → 4N|CFGQ|<我有的哈希或 -> ← 4N|CFG|<哈希>|<第几块>|<共几块>|<内容>（每块 ≤ 900 字节，内容里本来就有 |，客户端只按前 5 个 | 切）
+// ← 已经是最新：4N|CFG|<哈希>|0|0| 没给 --cfg：4N|CFG|-|0|0|
 // fornet-ranked.mjs 只在给了 --ranked 时才加载：没有这个文件、不加 --ranked，服务器照常跑（排位不公开源码，不随发布包分发）。
 //
-// §174 拉黑 / 封禁（HANDOVER §174；举报 0.34 整个删了，TASK_0.34 §2.3：没有 REPORT / RPTOK / RPTERR / --reports / --dump-reports）：
-//   REG 第 15 段 = 主机标记（主机安装号的哈希），列表第 10 列原样给出：客户端据此不列自己拉黑的人开的房。
-//   --bans <文件>：武林盟主封禁名单（作者手动维护，改了自动重读）。一行一个排位 pid（# 后面是注释）；
-//     0.34 起**不再按 SteamID 封**（服务器不存任何 Steam 标识，TASK_0.34 总原则 3）。名单里的 pid 登记 / 加入排位房间都回 ERR …|banned。普通房间不管。
+// 拉黑 / 封禁（举报 0.34 整个删了，：没有 REPORT / RPTOK / RPTERR / --reports / --dump-reports）：
+// REG 第 15 段 = 主机标记（主机安装号的哈希），列表第 10 列原样给出：客户端据此不列自己拉黑的人开的房。
+// --bans <文件>：排位封禁名单（作者手动维护，改了自动重读）。一行一个排位 pid（# 后面是注释）；
+// 0.34 起**不再按平台账号 ID封**（服务器不存任何桥接平台标识， 总原则 3）。名单里的 pid 登记 / 加入排位房间都回 ERR …|banned。普通房间不管。
 import dgram from 'node:dgram';
 import crypto from 'node:crypto';
 import dns from 'node:dns';
@@ -96,21 +96,21 @@ const arg = (name, def) => {
 };
 // 线上协议名（docs/USAGE.md "协议名字"）。默认是 4net 的中性名；已经有玩家在用某套名字的游戏，用自己的生成脚本把下面这一行
 // 换成那套名字的默认值（整行替换，标记 @wire-defaults 别删），或者启动时给 --wire-server / --wire-peer。客户端联机程序要用同一套（WireTag.cs）。
-//   server：服务器控制包标记 "<server>|REG|…"；peer：对端包前缀（这里只认转发头 "<peer>R|" / W / V / U）；
-//   alias：另一个也认的控制包标记（回包用对方来时的那个，空 = 不认）；env：环境变量前缀；ranked：排位模块默认文件名；map：服务器房默认地图名
+// server：服务器控制包标记 "<server>|REG|…"；peer：对端包前缀（这里只认转发头 "<peer>R|" / W / V / U）；
+// alias：另一个也认的控制包标记（回包用对方来时的那个，空 = 不认）；env：环境变量前缀；ranked：排位模块默认文件名；map：服务器房默认地图名
 const WIRE_DEFAULTS = { server: '4N', peer: '4N', alias: '', env: 'FORNET_', ranked: './ranked.mjs', map: 'Map_Server' };     // @wire-defaults
 const WS = arg('--wire-server', WIRE_DEFAULTS.server);
 const WP = arg('--wire-peer', WIRE_DEFAULTS.peer);
 const WALIAS = arg('--wire-alias', WIRE_DEFAULTS.alias) || '';
 const env = (name) => process.env[WIRE_DEFAULTS.env + name];
 const PORT = Number(arg('--port', process.env.PORT || 27020));
-// §327 默认 :: = 双栈（IPv4 + IPv6）；写多个见下面 socks 那段
+// 默认 :: = 双栈（IPv4 + IPv6）；写多个见下面 socks 那段
 const HOSTS = (process.argv.flatMap((a, i) => (a === '--host' && process.argv[i + 1] ? [process.argv[i + 1]] : [])).join(',') || process.env.HOST || '::')
     .split(',').map((h) => h.trim().replace(/^\[(.*)\]$/, '$1')).filter(Boolean);
 const HOST_GIVEN = process.argv.includes('--host') || !!process.env.HOST;
 const QUIET = process.argv.includes('--quiet');
-// 0.34（TASK_0.34 最终方案 3，排法 B）：中转拆成两个开关。--relay = 两个都开（自建服务器照旧）；
-//   --relay-watch 只转观战流（测试服务器 0.34 用这个：对局不中转，观战转发保留）；--relay-match 只转对局（没人该用，留着对称）
+// 0.34（最终方案 3，排法 B）：中转拆成两个开关。--relay = 两个都开（自建服务器照旧）；
+// --relay-watch 只转观战流（测试服务器 0.34 用这个：对局不中转，观战转发保留）；--relay-match 只转对局（没人该用，留着对称）
 const RELAY_MATCH = process.argv.includes('--relay') || process.argv.includes('--relay-match');     // 0.34 评审：不再认环境变量 RELAY=1（systemd 里遗留的会悄悄把中转打开）
 const RELAY_WATCH = process.argv.includes('--relay') || process.argv.includes('--relay-watch');
 const RANKED_FILE = arg('--ranked', process.env.RANKED || '');
@@ -123,18 +123,18 @@ const SESSION_TTL = 30_000;       // 会话 30 秒没包就删
 const MAX_ROOMS = 1000;
 const MAX_LIST = 40;
 const MAX_PACKET = 1400;
-const MAX_FWD = 8192;              // §269.21（0.33 线移植）4NR / 4NW / 4NV / 4NU 转发包的上限（完整状态包 2.4–2.6 KB）
+const MAX_FWD = 8192;              // （0.33 线移植）4NR / 4NW / 4NV / 4NU 转发包的上限（完整状态包 2.4–2.6 KB）
 const FWD_HEADS = new Set([`${WP}R|`, `${WP}W|`, `${WP}V|`, `${WP}U|`]);
 const FWD_LEN = WP.length + 2;     // 转发头 "<peer>R|" 的长度（别写死）
 const SSTATE = `${WS}|SSTATE|`, SRLY = `${WS}|SRLY|`;     // 服务器房的两种带原包的控制包（按字节头认）
 const PUSH_CHUNK = 6;             // 每个 PUSH 包几个房间（中文名字 32 字 ≈ 96 字节，6 个也在 1400 以内）
 const MAX_REMOTE_PER_SOURCE = 200;
 const RELAY_RATE = 120;           // 每个会话每个方向每秒最多转发多少包（游戏 30 包/秒，留余量）
-const MAX_WATCH = 8;              // §141 每个房间最多几个观战者
+const MAX_WATCH = 8;              // 每个房间最多几个观战者
 const WATCH_TTL = 6_000;          // 观战者 6 秒没保活就移出
 const WATCH_RATE = 150;           // 主机每秒最多上传多少观战包（两路 × 30 包/秒，留余量）
 
-// §241 M6 服务器房鉴权 / 限速（只作用于 --room 服务器自己开的房；普通大厅 / 排位 / 观战老协议不受影响）。
+// M6 服务器房鉴权 / 限速（只作用于 --room 服务器自己开的房；普通大厅 / 排位 / 观战老协议不受影响）。
 // 每个玩家加入时服务器发一个随机会话口令（SHOST 第 7 段）；之后 SSTATE / SRLY / SRELAY / SREPORT / SCHAT / SLEAVE
 // 都要带口令，且必须从加入时的来源端点发出，否则丢弃并计数。按"来源端点 + 消息类型"做令牌桶，持续超限临时拉黑。
 const numArg = (name, def, min, max) => {
@@ -161,7 +161,7 @@ const S_BAN_SEC = numArg('--sban-sec', 30, 0, 3600);                         // 
 /** @type {Map<string, {id:string,key:string,name:string,map:string,full:boolean,host:string,hostLocal:string,noRelay?:boolean,seen:number}>} */
 const rooms = new Map();          // 房间号 → 房间
 const byKey = new Map();          // 主机密钥 → 房间号
-let serverRoom = null;            // §240 M5 服务器自己开的房间（不属于任何玩家；--room 才建）
+let serverRoom = null;            // M5 服务器自己开的房间（不属于任何玩家；--room 才建）
 /** @type {Map<string, {sid:string,room:string,a:string,b:string,bLocal:string,relay:boolean,seen:number,rate:Object}>} */
 const sessions = new Map();       // 会话号 → { a 主机端点, b 客机端点 }
 /** @type {Map<string, {id:string,name:string,map:string,full:boolean,home:string,via:string,seen:number}>} */
@@ -171,10 +171,10 @@ const upstreams = new Map(UPSTREAMS.map((a) => [a, { addr: a, ep: null, self: ''
 const stats = { rx: 0, relayed: 0, dropped: 0, rebound: 0, sendErr: 0 };
 
 const log = (...a) => { if (!QUIET) console.log(new Date().toISOString().slice(11, 23), ...a); };
-// §133 中转诊断：--quiet 下也写，但只写会话号 / 房间号 / 计数，从不写 IP（中转两个方向各转了多少、为什么丢）
+// 中转诊断：--quiet 下也写，但只写会话号 / 房间号 / 计数，从不写 IP（中转两个方向各转了多少、为什么丢）
 const note = (...a) => console.log(new Date().toISOString().slice(11, 23), ...a);
 const ctr = (s) => s.ctr ?? (s.ctr = { ab: 0, ba: 0, early: 0, unk: 0, unkA: 0, unkB: 0, rate: 0, rebA: 0, rebB: 0, logged: '' });
-// 日志只写地址前两段：IPv4 前两个数、IPv6 前两组（§327）
+// 日志只写地址前两段：IPv4 前两个数、IPv6 前两组
 const ip16 = (e) => { const ip = ipOf(e); return ip.includes(':') ? ip.split(':').slice(0, 2).join(':') : ip.split('.').slice(0, 2).join('.'); };
 function relaySummary(s, why) {
     const c = ctr(s);
@@ -186,14 +186,14 @@ function relaySummary(s, why) {
 // F4c-2 桥接传输的对端 id（外部联机服务给的账号号码，服务器只当不透明的数字串介绍一次、不落盘）：5–20 位数字；别的一律当没有
 const bridgeIdOf = (s) => (/^\d{5,20}$/.test(String(s ?? '').trim()) ? String(s).trim() : '');
 const clean = (s, n) => String(s ?? '').replace(/[|\t\r\n]/g, ' ').slice(0, n);
-// §327 双栈：双栈 socket 收到的 IPv4 包来源是 ::ffff:a.b.c.d，一律还原成 a.b.c.d（不然同一个 IPv4 玩家前后会被当成两个端点）；
+// 双栈：双栈 socket 收到的 IPv4 包来源是 ::ffff:a.b.c.d，一律还原成 a.b.c.d（不然同一个 IPv4 玩家前后会被当成两个端点）；
 // 端点字符串 IPv4 = "a.b.c.d:端口"，IPv6 = "[地址]:端口"（和客户端 Addr.Fmt / ParseEp 一样）
 const normAddr = (a) => { const m = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(String(a)); return m ? m[1] : String(a); };
 const fmtEp = (addr, port) => (String(addr).includes(':') ? `[${addr}]:${port}` : `${addr}:${port}`);
 const ep = (r) => fmtEp(normAddr(r.address), r.port);
 const famOf = (e) => (ipOf(e).includes(':') ? 6 : 4);
 
-// §240 M5：服务器自己开房（默认关）。--room 1v1 = 两人 1v1 解说式；--room mp = 多人混战（--room-size 人）。
+// M5：服务器自己开房（默认关）。--room 1v1 = 两人 1v1 解说式；--room mp = 多人混战（--room-size 人）。
 // 房间不属于任何玩家：服务器管名单 / 编号 / 规则 / 开始结束计分 / 聊天 / 观战，玩家之间仍然直连互发状态。
 const ROOM_KIND = (arg('--room', env('ROOM') || '') || '').toLowerCase();
 const ROOM_SIZE_RAW = Number(arg('--room-size', env('ROOM_SIZE') || (ROOM_KIND === 'mp' ? 4 : 2)));
@@ -216,10 +216,10 @@ const newId = (len) => {
     return s;
 };
 
-// §181 作弊数据采样 / 可疑排名：0.34 整个删了（TASK_0.34 §2.2，HANDOVER §250.2）
-// ---- §240 M5 服务器自己开的房间（AGPL 同一份，--room 才开；默认关）
+// 作弊数据采样 / 可疑排名：0.34 整个删了
+// ---- M5 服务器自己开的房间（AGPL 同一份，--room 才开；默认关）
 // 服务器只核对玩家上报的数据，不跑游戏：名单 / 编号 / 规则 / 开始结束 / 计分 / 聊天 / 捡道具判定 / 观战转发。
-// 玩家之间仍由服务器介绍后直连互发状态（SMESH → 各自的 MeshMp），打不通可由玩家请求服务器中转（SRELAY）。
+// 玩家之间仍由服务器介绍后直连互发状态（S → 各自的 MeshMp），打不通可由玩家请求服务器中转（SRELAY）。
 function parseProps(s) {
     const out = new Map();
     for (const part of String(s || '').split(';')) {
@@ -243,9 +243,9 @@ function createServerRoom() {
         props: parseProps(ROOM_PROPS), pickRange: ROOM_PICK_RANGE,
         players: new Map(), watchers: new Map(), watch: true, maxWatch: MAX_WATCH,
         full: false, seen: Date.now(), started: 0, match: null, pairs: new Map(), taken: new Map(), nextMid: 0,
-        // §283 多人服务器房第一位玩家当对局主机
+        // 多人服务器房第一位玩家当对局主机
         matchHost: 0, mpState: 'idle',
-        // §241 鉴权 / 限速：每个端点的令牌桶、超限计数、临时拉黑、日志节流
+        // 鉴权 / 限速：每个端点的令牌桶、超限计数、临时拉黑、日志节流
         rate: new Map(), over: new Map(), bans: new Map(), secLog: new Map(),
         sec: { badToken: 0, badEp: 0, badSize: 0, rate: 0, banned: 0, ban: 0, rejoin: 0 },
     };
@@ -261,7 +261,7 @@ const serverRoomPlayer = (room, from) => {
     return null;
 };
 
-// §241 会话口令比较（长度先比，再按字节常量时间比较；口令是 newId(16)）
+// 会话口令比较（长度先比，再按字节常量时间比较；口令是 newId(16)）
 function sameToken(a, b) {
     const x = String(a ?? ''), y = String(b ?? '');
     if (x.length < 8 || x.length !== y.length) return false;
@@ -356,7 +356,7 @@ function sendServerRoomRoster(room) {
     for (const p of room.players.values()) send(text, p.ep);
 }
 
-// §283 多人服务器房交给第一位玩家当对局主机（kind === 'mp' 时不建 match、不发 SMPM/SSCORE、不判 dead/ko/pick）
+// 多人服务器房交给第一位玩家当对局主机（kind === 'mp' 时不建 match、不发 SMPM/SSCORE、不判 dead/ko/pick）
 const isPlayerMatchHost = (room) => room && room.kind === 'mp';
 
 function updateServerRoomMatchHost(room, why) {
@@ -370,7 +370,7 @@ function updateServerRoomMatchHost(room, why) {
     const nextHost = earliest ? earliest.pid : 0;
     if (room.matchHost !== nextHost) {
         room.matchHost = nextHost;
-        room.mpState = 'idle';     // §283 对局主机变了就把 room.mpState 清成 idle
+        room.mpState = 'idle';     // 对局主机变了就把 room.mpState 清成 idle
         log(`[room] ${room.id} 对局主机 → ${nextHost}（${why}）`);
         const msg = `${WS}|SMHOST|${nextHost}`;
         for (const p of room.players.values()) send(msg, p.ep);
@@ -392,7 +392,7 @@ function serverRoomIntros(room) {
 }
 
 function serverRoomJoin(room, from, f, now) {
-    // §241 服务器房：JOIN 也要限速（正常客户端 1 次/秒）；被临时拉黑的端点直接丢
+    // 服务器房：JOIN 也要限速（正常客户端 1 次/秒）；被临时拉黑的端点直接丢
     if (serverRoomBanned(room, from, now)) return;
     if (!takeToken(room, from, 'join', now)) { rateDrop(room, from, now); return; }
     // JOIN 第 6 段 = 会话口令。第一次加入没有；NAT 换了端口时拿旧口令重新握手，认成同一个人。
@@ -418,7 +418,7 @@ function serverRoomJoin(room, from, f, now) {
     if (!p) {
         if (room.players.size >= room.size) { send(`${WS}|ERR|${room.id}|full`, from); return; }
         if (room.kind === 'mp') {
-            // §322 多人房（淘汰 / 积分 / 对决）对局中也收：进来的人这局先观战，下局参加（游戏脚本管）
+            // 多人房（淘汰 / 积分 / 对决）对局中也收：进来的人这局先观战，下局参加（游戏脚本管）
         } else {
             if (room.match && (room.match.state === 'cd' || room.match.state === 'fight')) { send(`${WS}|ERR|${room.id}|inmatch`, from); return; }
         }
@@ -428,7 +428,7 @@ function serverRoomJoin(room, from, f, now) {
         p = {
             pid, ep: from, local: clean(f[3], 32), nick: clean(f[4], 24), joined: now, seen: now,
             dead: 0, scored: 0, score: 0, alive: true, deathAt: 0, claimBy: null, pos: null,
-            lastPick: '', relayTo: 0, token: newId(16),          // §241 会话口令（只在 SHOST 里发给本人）
+            lastPick: '', relayTo: 0, token: newId(16),          // 会话口令（只在 SHOST 里发给本人）
         };
         if (!p.nick) p.nick = `玩家${pid}`;
         room.players.set(pid, p);
@@ -477,13 +477,13 @@ function serverRoomChat(room, from, token, text, size, now) {
 }
 
 function serverRoomState(room, from, text, now) {
-    // §241 头：4N|SSTATE|<编号>|<会话口令>\n<原状态包>（旧客户端没有第 4 段，会被当没口令丢掉）
+    // 头：4N|SSTATE|<编号>|<会话口令>\n<原状态包>（旧客户端没有第 4 段，会被当没口令丢掉）
     const nl = text.indexOf('\n');
     if (nl < 0) return;
     const head = text.slice(0, nl).split('|');
     const p = serverRoomAuth(room, from, head[3], 'state', Buffer.byteLength(text), now);
     if (!p) return;
-    // §283 多人房看对局主机 SSTATE 正文里的 mpm=<状态>:... 记 room.mpState，mpx=<模式> 记 room.mpMode / room.mpTeams
+    // 多人房看对局主机 SSTATE 正文里的 mpm=<状态>:... 记 room.mpState，mpx=<模式> 记 room.mpMode / room.mpTeams
     if (room.kind === 'mp' && p.pid === room.matchHost) {
         const body = text.slice(nl + 1);
         const m = body.match(/(?:^|\n)mpm=([a-zA-Z0-9_]+):/);
@@ -507,7 +507,7 @@ function serverRoomState(room, from, text, now) {
 }
 
 function serverRoomRelay(room, from, text, now) {
-    // §241 头：4N|SRLY|<对方编号>|<会话口令>\n<原状态包>
+    // 头：4N|SRLY|<对方编号>|<会话口令>\n<原状态包>
     const nl = text.indexOf('\n');
     if (nl < 0) return;
     const head = text.slice(0, nl).split('|');
@@ -553,7 +553,7 @@ function serverRoomStart(room) {
         log(`[room] ${room.id} 1v1 两人到齐，规则由服务器下发，${ps[0].pid} 当对局主机`);
         return;
     }
-    // §283 多人服务器房交给第一位玩家当对局主机：不建 room.match、不发 SMPM / SSCORE
+    // 多人服务器房交给第一位玩家当对局主机：不建 room.match、不发 SMPM / SSCORE
     if (isPlayerMatchHost(room)) return;
     if (room.match) return;
     room.nextMid++;
@@ -597,7 +597,7 @@ function serverRoomKill(room, attacker, victim, now) {
 }
 
 // 双方上报交叉核对：杀的人报 ko=死者，死者自己报 dead=次数；两边都有才计分。
-// §241 头：4N|SREPORT|<编号>|<会话口令>|<k=v;…>
+// 头：4N|SREPORT|<编号>|<会话口令>|<k=v;…>
 function serverRoomReport(room, from, f, now) {
     const p = serverRoomAuth(room, from, f[3], 'report', Buffer.byteLength(f.join('|')), now);
     if (!p) return;
@@ -610,7 +610,7 @@ function serverRoomReport(room, from, f, now) {
         const x = Number(fld.x), y = Number(fld.y), z = Number(fld.z);
         if ([x, y, z].every(Number.isFinite)) p.pos = { x, y, z };
     }
-    // §283 多人服务器房交给第一位玩家当对局主机：对多人房不再计分 / 判道具（位置 x/y/z 照收）
+    // 多人服务器房交给第一位玩家当对局主机：对多人房不再计分 / 判道具（位置 x/y/z 照收）
     if (isPlayerMatchHost(room)) return;
     const m = room.match;
     if (fld.dead !== undefined) {
@@ -649,7 +649,7 @@ function serverRoomReport(room, from, f, now) {
         }
     }
     if (fld.pick !== undefined) {
-        if (!takeToken(room, from, 'pick', now)) { rateDrop(room, from, now); return; }     // §241 捡道具单独限速
+        if (!takeToken(room, from, 'pick', now)) { rateDrop(room, from, now); return; }     // 捡道具单独限速
         serverRoomPick(room, p, clean(fld.pick, 16), now);
     }
 }
@@ -689,7 +689,7 @@ function serverRoomTick(now) {
     const room = serverRoom;
     if (!room) return;
     watchCount(room, now);
-    // §241 清理过期的临时拉黑 / 令牌桶 / 计数（不影响仍在用的端点）
+    // 清理过期的临时拉黑 / 令牌桶 / 计数（不影响仍在用的端点）
     for (const [key, until] of room.bans) if (now >= until) room.bans.delete(key);
     for (const [key, b] of room.rate) if (now - b.at > 60_000) room.rate.delete(key);
     for (const [key, o] of room.over) if (now - o.win > S_BAN_WINDOW * 1000 && now >= (o.until || 0)) room.over.delete(key);
@@ -717,11 +717,11 @@ function serverRoomTick(now) {
 
 
 
-// §327 双栈。默认一个 socket 听 [::]，IPv4 / IPv6 都收（ipv6Only: false）；系统开不了 IPv6 时退回只听 0.0.0.0。
+// 双栈。默认一个 socket 听 [::]，IPv4 / IPv6 都收（ipv6Only: false）；系统开不了 IPv6 时退回只听 0.0.0.0。
 // --host 可以写多个（逗号分开或写多次），每个地址一个 socket：
-//   --host 0.0.0.0              只听 IPv4（和以前一字不差）
-//   --host 0.0.0.0,2001:db8::5   IPv4 + 一个指定的 IPv6 地址。机器有好几个公网 IPv6 时要这样写，并让域名的 AAAA 指向这个地址：
-//                                听 [::] 的 socket 回包时源地址由系统挑，可能不是玩家发过去的那个，玩家的路由器 / 防火墙会把回包当陌生包丢掉
+// --host 0.0.0.0 只听 IPv4（和以前一字不差）
+// --host 0.0.0.0,2001:db8::5 IPv4 + 一个指定的 IPv6 地址。机器有好几个公网 IPv6 时要这样写，并让域名的 AAAA 指向这个地址：
+// 听 [::] 的 socket 回包时源地址由系统挑，可能不是玩家发过去的那个，玩家的路由器 / 防火墙会把回包当陌生包丢掉
 // 回包从收到对方的那个 socket 出去（同一族开了好几个 socket 时按来源记着）
 /** @type {{sock: import('node:dgram').Socket, host: string, kind: 4|6|46}[]} */
 const socks = [];
@@ -745,7 +745,7 @@ if (RANKED_FILE) {
 }
 
 
-// §158 数值表：读一次，之后每 5 秒看文件改没改
+// 数值表：读一次，之后每 5 秒看文件改没改
 const cfg = { text: '', hash: '-', chunks: [] };
 function fnv(s) {
     let h = 0x811c9dc5;
@@ -774,7 +774,7 @@ if (CFG_FILE) {
     fs.watchFile(CFG_FILE, { interval: 5000 }, loadCfg);
 }
 
-// §174 武林盟主封禁名单：一行一个排位 pid（0.34 起不认 SteamID）
+// 排位封禁名单：一行一个排位 pid（0.34 起不认平台账号 ID）
 let bans = new Set();
 function loadBans() {
     let t = '';
@@ -801,8 +801,8 @@ function send(text, to) {
     if (typeof text === 'string' && text.startsWith(`${WS}|`) && wireAlias.has(to)) text = WALIAS + '|' + text.slice(WS.length + 1);     // 按标记长度切，别写死
     const fam = host.includes(':') ? 6 : 4;
     const s = sockFor(to, fam);
-    if (!s) { stats.sendErr++; return; }     // §327 这一族没有能发的 socket（比如只开了 IPv4）
-    // §327 双栈 socket 发 IPv4 要写成 ::ffff:a.b.c.d（直接写 a.b.c.d 是 EINVAL）。带回调：发送出错只计数，不走 socket 的 'error'（那里会退出进程）
+    if (!s) { stats.sendErr++; return; }     // 这一族没有能发的 socket（比如只开了 IPv4）
+    // 双栈 socket 发 IPv4 要写成 ::ffff:a.b.c.d（直接写 a.b.c.d 是 EINVAL）。带回调：发送出错只计数，不走 socket 的 'error'（那里会退出进程）
     s.sock.send(Buffer.isBuffer(text) ? text : Buffer.from(text, 'utf8'), port, fam === 4 && s.kind !== 4 ? '::ffff:' + host : host, sendDone);
 }
 const sendDone = (err) => { if (err) stats.sendErr++; };
@@ -823,7 +823,7 @@ function splitEp(s) {
     return [s.slice(0, i), Number(s.slice(i + 1))];
 }
 
-// §327 "域名或地址[:端口]"（--upstream 用）→ [主机, 端口]：[v6]:端口、裸 IPv6（多个冒号，不带端口）、a.b.c.d[:端口]、域名[:端口]
+// "域名或地址[:端口]"（--upstream 用）→ [主机, 端口]：[v6]:端口、裸 IPv6（多个冒号，不带端口）、a.b.c.d[:端口]、域名[:端口]
 function splitHostPort(s, defPort) {
     s = String(s).trim();
     if (s[0] === '[') { const [h, p] = splitEp(s); return [h, Number.isFinite(p) && p > 0 ? p : defPort]; }
@@ -832,7 +832,7 @@ function splitHostPort(s, defPort) {
     return [s, defPort];
 }
 
-// §131 中转会话里某一端换了公网端口（NAT 重新映射；校园网这类大 NAT 很常见）：以前只认登记时的"IP:端口"，
+// 中转会话里某一端换了公网端口（NAT 重新映射；校园网这类大 NAT 很常见）：以前只认登记时的"IP:端口"，
 // 换了端口的包一律丢掉，结果那一端只过得去第一个包。现在会话号对、IP 只和其中一端对得上，就认作那一端并更新端点。
 // 两端同一个公网 IP（分不清是谁）或 IP 都对不上，还是只认原来的端点。
 const ipOf = (e) => splitEp(e)[0];
@@ -856,7 +856,7 @@ function onControl(f, from, text) {
         case 'PING':
             send(`${WS}|PONG|${from}`, from);
             return;
-        case 'CFGQ': {     // §158 数值表（0.34 评审：整表几 KB，按源 IP 限速防反射放大）
+        case 'CFGQ': {     // 数值表（0.34 评审：整表几 KB，按源 IP 限速防反射放大）
             if (!rateOk(from, 'cfgq', 5_000, now)) { stats.dropped++; return; }
             if (!cfg.chunks.length) { send(`${WS}|CFG|-|0|0|`, from); return; }
             if (clean(f[2], 16) === cfg.hash) { send(`${WS}|CFG|${cfg.hash}|0|0|`, from); return; }
@@ -869,7 +869,7 @@ function onControl(f, from, text) {
             const rk = f[8] === '1', pid = clean(f[9], 16);
             if (rk && !ranked) { send(`${WS}|ERR|-|noranked`, from); return; }
             if (rk && !ranked.known(pid)) { send(`${WS}|ERR|-|unknown`, from); return; }
-            if (rk && banned(pid)) { send(`${WS}|ERR|-|banned`, from); return; }     // §174（0.34 只按 pid）
+            if (rk && banned(pid)) { send(`${WS}|ERR|-|banned`, from); return; }     // （0.34 只按 pid）
             let id = byKey.get(key);
             let room = id && rooms.get(id);
             if (!room) {
@@ -894,22 +894,22 @@ function onControl(f, from, text) {
                 room.mpTag = '';
                 room.full = f[5] === '1';
             }
-            // §131 这个房间的会话里主机端点也跟着换（心跳带主机密钥，就是主机本人；中转里已经换过的也一并改成最新的）
+            // 这个房间的会话里主机端点也跟着换（心跳带主机密钥，就是主机本人；中转里已经换过的也一并改成最新的）
             for (const s of sessions.values()) if (s.room === id && s.a !== from) s.a = from;
             room.host = from;                       // 主机换了公网端口（NAT 重新映射）也跟着更新
-            if (room.hostAlt && famOf(room.hostAlt) === famOf(from)) room.hostAlt = '';     // §327 主机换了登记用的地址族：原来记的另一族作废
+            if (room.hostAlt && famOf(room.hostAlt) === famOf(from)) room.hostAlt = '';     // 主机换了登记用的地址族：原来记的另一族作废
             room.hostLocal = clean(f[6], 32);
-            room.noRelay = f[7] === '0';            // 主机在设置里没允许中转（HANDOVER §102）
-            room.ranked = rk;                       // §110 武林盟主排位房间
+            room.noRelay = f[7] === '0';            // 主机在设置里没允许中转
+            room.ranked = rk;                       // 排位排位房间
             room.pid = rk ? pid : '';
-            room.bridgeRoom = f[15] === '1';         // 0.34 第 16 段 = 房主开了"对局走 Steam"（排位 0.34 起也默认直连，不再隐含）
-            // §279 第 16 段 = 2：直连失败时走桥接。客机照常打洞直连；客机也带了桥接 ID 时互相介绍，直连不通再经桥接连。
+            room.bridgeRoom = f[15] === '1';         // 0.34 第 16 段 = 房主开了"对局走桥接平台"（排位 0.34 起也默认直连，不再隐含）
+            // 第 16 段 = 2：直连失败时走桥接。客机照常打洞直连；客机也带了桥接 ID 时互相介绍，直连不通再经桥接连。
             // 客机没带桥接 ID 也能进（只走直连）。旧服务端不认 2 = 普通直连房；旧客户端只认列表第 11 列 = 1，看到 2 当普通房
             room.bridgeFallback = f[15] === '2';
-            room.bridge = room.bridgeRoom || room.bridgeFallback ? bridgeIdOf(f[10]) : '';   // Steam 房才记主机的 SteamID（内存里介绍完即弃，不落盘；§135 / TASK_0.34 总原则 3）
-            room.watch = f[11] === '1' && !rk;         // §141 主机认观战（排位房间不给看）
-            room.aiFight = f[13] === '1';           // §141 第 14 段 = 主机在和本地 AI 对打（列表第 9 列）
-            room.bh = clean(f[14], 16);             // §174 第 15 段 = 主机标记（列表第 10 列）
+            room.bridge = room.bridgeRoom || room.bridgeFallback ? bridgeIdOf(f[10]) : '';   // 桥接平台房才记主机的平台账号 ID（内存里介绍完即弃，不落盘； / 总原则 3）
+            room.watch = f[11] === '1' && !rk;         // 主机认观战（排位房间不给看）
+            room.aiFight = f[13] === '1';           // 第 14 段 = 主机在和本地 AI 对打（列表第 9 列）
+            room.bh = clean(f[14], 16);             // 第 15 段 = 主机标记（列表第 10 列）
             room.maxWatch = Math.min(MAX_WATCH, Number.isFinite(Number(f[12])) && f[12] !== undefined && f[12] !== '' ? Number(f[12]) : MAX_WATCH);   // 第 13 段 = 主机设的上限
             delete room.hostDeadAt;
             room.seen = now;
@@ -921,7 +921,7 @@ function onControl(f, from, text) {
             const id = byKey.get(clean(f[2], 64));
             const room = id ? rooms.get(id) : null;
             if (!room) return;
-            // §298.1 房里还有成员才等 REHOST；房主一个人开的房直接删（不然列表里留 10 秒、点进去连的是走了的人）
+            // 房里还有成员才等 REHOST；房主一个人开的房直接删（不然列表里留 10 秒、点进去连的是走了的人）
             const hasMembers = [...sessions.values()].some((x) => x.room === id);
             if (!room.hosted && room.mpMax > 0 && hasMembers) {
                 room.hostDeadAt = Date.now();
@@ -973,7 +973,7 @@ function onControl(f, from, text) {
             return;
         }
         case 'LIST': {
-            // 自己的房间排前面，再是别的服务器的；各自未满的在前；§110 武林盟主开的房间排最前
+            // 自己的房间排前面，再是别的服务器的；各自未满的在前； 排位开的房间排最前
             const title = (r) => (r.ranked && ranked ? ranked.titleOf(r.pid) : '');
             const mpInfo = (r) => {
                 if (r.hosted && r.kind === 'mp') {
@@ -986,12 +986,12 @@ function onControl(f, from, text) {
                 return '';
             };
             const order = (x, y) => Number(!x.title) - Number(!y.title) || Number(x.full) - Number(y.full) || y.seen - x.seen;
-            // §298.1 玩家开的多人房：房主已注销 / 6 秒没心跳（等成员 REHOST 中）先不列，免得新人连到走了的房主
+            // 玩家开的多人房：房主已注销 / 6 秒没心跳（等成员 REHOST 中）先不列，免得新人连到走了的房主
             const waitingRehost = (r) => !r.hosted && r.mpMax > 0 && (r.hostDeadAt || (r.seen > 0 && now - r.seen > 6000));
             const own = [...rooms.values()].filter((r) => !waitingRehost(r)).map((r) => ({ ...r, home: '', title: title(r) })).sort(order);
             const list = own.concat([...remote.values()].sort(order)).slice(0, MAX_LIST);
-            // §141 第 8 列 = 能观战（主机认观战、这台开了中转、是这台自己的房间）；§279 第 11 列 2 = 直连失败时走桥接；§284 第 12 列 = 多人信息
-            send(`${WS}|ROOMS\n` + list.map((r) => `${r.id}\t${r.name}\t${r.map}\t${r.full ? 1 : 0}\t${r.home}\t${r.ranked ? 1 : 0}\t${r.title || ''}\t${r.watch && (RELAY_WATCH || r.hosted) && !r.home ? 1 : 0}\t${r.aiFight ? 1 : 0}\t${r.bh || ''}\t${r.bridgeRoom ? 1 : r.bridgeFallback ? 2 : 0}\t${mpInfo(r)}`).join('\n'), from);     // 0.34 第 11 列 = 对局走 Steam
+            // 第 8 列 = 能观战（主机认观战、这台开了中转、是这台自己的房间）； 第 11 列 2 = 直连失败时走桥接； 第 12 列 = 多人信息
+            send(`${WS}|ROOMS\n` + list.map((r) => `${r.id}\t${r.name}\t${r.map}\t${r.full ? 1 : 0}\t${r.home}\t${r.ranked ? 1 : 0}\t${r.title || ''}\t${r.watch && (RELAY_WATCH || r.hosted) && !r.home ? 1 : 0}\t${r.aiFight ? 1 : 0}\t${r.bh || ''}\t${r.bridgeRoom ? 1 : r.bridgeFallback ? 2 : 0}\t${mpInfo(r)}`).join('\n'), from);     // 0.34 第 11 列 = 对局走桥接平台
             return;
         }
         case 'WATCH': {
@@ -1000,7 +1000,7 @@ function onControl(f, from, text) {
             if (!room) { send(`${WS}|ERR|${id}|nofound`, from); return; }
             if (room.ranked) { send(`${WS}|ERR|${id}|ranked`, from); return; }
             if (!room.watch) { send(`${WS}|ERR|${id}|nowatch`, from); return; }
-            if (!RELAY_WATCH && !room.hosted) { send(`${WS}|ERR|${id}|norelay`, from); return; }      // §240 服务器自己的房不收上传，不靠 --relay 也能看
+            if (!RELAY_WATCH && !room.hosted) { send(`${WS}|ERR|${id}|norelay`, from); return; }      // 服务器自己的房不收上传，不靠 --relay 也能看
             room.watchers ??= new Map();
             watchCount(room, now);
             const w = room.watchers.get(from);
@@ -1008,8 +1008,8 @@ function onControl(f, from, text) {
                 if (room.watchers.size >= (room.maxWatch ?? MAX_WATCH)) { send(`${WS}|ERR|${id}|watchfull`, from); return; }
                 room.watchers.set(from, { seen: now, down: f[3] === 'down', noq: f[4] === 'noq', dz: f[5] === 'dz' });
                 log(`[watch] ${ip16(from)} 观战房间 ${id}${f[3] === 'down' ? '（刚下场）' : ''}${f[4] === 'noq' ? '（只观战）' : ''}`);
-            } else { w.seen = now; w.noq = f[4] === 'noq'; w.dz = f[5] === 'dz'; if (f[3] === 'up') w.down = false; }     // §141 观战者切回了排队；§223.4 会不会拼省流包
-            // §223.4 观战者都会不会拼变了（来了个旧版 / 旧版走了在 watchCount 里）、§223.6 或者来了个新观战者（人数变了，
+            } else { w.seen = now; w.noq = f[4] === 'noq'; w.dz = f[5] === 'dz'; if (f[3] === 'up') w.down = false; }     // 观战者切回了排队； 会不会拼省流包
+            // 观战者都会不会拼变了（来了个旧版 / 旧版走了在 watchCount 里）、 或者来了个新观战者（人数变了，
             // 主机要发一次全量给新来的）：马上告诉主机，不等它下次心跳
             const allDz = allWatchDz(room);
             if ((!w || allDz !== room.lastAllDz) && room.host) send(regok(room, id, room.host, now), room.host);
@@ -1052,10 +1052,10 @@ function onControl(f, from, text) {
             const id = clean(f[2], 16).toUpperCase();
             const room = rooms.get(id);
             if (!room) { send(`${WS}|ERR|${id}|nofound`, from); return; }
-            if (room.hosted) { serverRoomJoin(room, from, f, now); return; }      // §240 服务器自己开的房
+            if (room.hosted) { serverRoomJoin(room, from, f, now); return; }      // 服务器自己开的房
             const cpid = clean(f[4], 16);
             let cbridge = bridgeIdOf(f[5]);
-            // §141.7 轮到队首上场的这段时间，只放拿着口令的（队首）进来
+            // 轮到队首上场的这段时间，只放拿着口令的（队首）进来
             const rs = room.reserve;
             if (rs && now <= rs.until && clean(f[6], 16) !== rs.token
                 && ![...sessions.values()].some((x) => x.room === id && x.b === from)) { send(`${WS}|ERR|${id}|full`, from); return; }
@@ -1067,14 +1067,14 @@ function onControl(f, from, text) {
                 room.full = false;
             }
             if (room.ranked && !(ranked && ranked.known(cpid) && cpid !== room.pid)) { send(`${WS}|ERR|${id}|ranked`, from); return; }
-            if (room.ranked && banned(cpid)) { send(`${WS}|ERR|${id}|banned`, from); return; }     // §174（0.34 只按 pid）
-            // 0.34 对局走 Steam 的房：客机也要带 SteamID（没带 = 没开 Steam / 没开"对局走 Steam"）；不是 Steam 房就不管客机带没带（不介绍、不记）
+            if (room.ranked && banned(cpid)) { send(`${WS}|ERR|${id}|banned`, from); return; }     // （0.34 只按 pid）
+            // 0.34 对局走桥接平台的房：客机也要带平台账号 ID（没带 = 没开桥接平台 / 没开"对局走桥接平台"）；不是桥接平台房就不管客机带没带（不介绍、不记）
             if (room.bridgeRoom && !cbridge) { send(`${WS}|ERR|${id}|needsteam`, from); return; }
             if (!room.bridgeRoom && !room.bridgeFallback) cbridge = '';
             // 同一个客机端点重发 JOIN（每次直连重试都会发）沿用原会话号
             let s = [...sessions.values()].find((x) => x.room === id && x.b === from && x.a === room.host);
             if (!s) {
-                // §322 多人房对局中也能进（以前 mpTagInMatch 就回 inmatch，连对决的观众也被挡）
+                // 多人房对局中也能进（以前 mpTagInMatch 就回 inmatch，连对决的观众也被挡）
                 if (room.full) { send(`${WS}|ERR|${id}|full`, from); return; }
                 s = { sid: newId(10), room: id, a: room.host, b: from, relay: false, seen: now, rate: {} };
                 room.hadPeer = true;
@@ -1085,11 +1085,11 @@ function onControl(f, from, text) {
             s.seen = now;
             if (room.ranked) ranked.session(s.sid, room.pid, cpid);
             s.bBridge = cbridge;
-            // §135 第 7 段 = 对方的 SteamID（排位房间才有；旧版联机程序只看前 6 段）
-            // 0.34 评审：主机的 SteamID 只给自己也报了 SteamID 的客机，同一来源 IP 对同一房间 30 秒一次（外人拿 LIST 扫 Steam 房批量收割主机 SteamID 的成本）
+            // 第 7 段 = 对方的平台账号 ID（排位房间才有；旧版联机程序只看前 6 段）
+            // 0.34 评审：主机的平台账号 ID只给自己也报了平台账号 ID的客机，同一来源 IP 对同一房间 30 秒一次（外人拿 LIST 扫桥接平台房批量收割主机平台账号 ID的成本）
             const giveBridge = room.bridge && cbridge && rateOk(from, 'peer:' + id, 30_000, now);
-            if (room.bridgeRoom && room.bridge && !giveBridge) { send(`${WS}|ERR|${id}|needsteam`, from); sessions.delete(s.sid); return; }     // §279 直连失败走桥接的房：没给成也照常直连
-            // §327 双栈：两边都可能从另一族报过地址（ALT）。第 5 段先给对方那一族的地址，第 8 段给剩下那一族（客户端两个都打洞）
+            if (room.bridgeRoom && room.bridge && !giveBridge) { send(`${WS}|ERR|${id}|needsteam`, from); sessions.delete(s.sid); return; }     // 直连失败走桥接的房：没给成也照常直连
+            // 双栈：两边都可能从另一族报过地址（ALT）。第 5 段先给对方那一族的地址，第 8 段给剩下那一族（客户端两个都打洞）
             const [hMain, hOther] = introAddrs(room.host, liveAlt(room.hostAlt, room.hostAltSeen, now), from);
             const [cMain, cOther] = introAddrs(from, liveAlt(s.bAlt, s.bAltSeen, now), room.host);
             send(peerMsg(id, s.sid, hMain, room.hostLocal, giveBridge ? room.bridge : '', hOther), from);
@@ -1097,9 +1097,9 @@ function onControl(f, from, text) {
             return;
         }
         case 'ALT': {
-            // §327 双栈客户端从另一族再报一次自己（和服务器说话用的那一族之外的那个）：
-            //   主机 → 4N|ALT|h|<密钥>      每次心跳一起发；客机 → 4N|ALT|c|<会话号>   拿到 PEER 后发
-            //   ← 4N|ALTOK|<h/c>|<服务器看到的这个地址>。同一族的不算（那不是"另一族"）；旧服务端不认 ALT，丢掉，客户端照旧
+            // 双栈客户端从另一族再报一次自己（和服务器说话用的那一族之外的那个）：
+            // 主机 → 4N|ALT|h|<密钥> 每次心跳一起发；客机 → 4N|ALT|c|<会话号> 拿到 PEER 后发
+            // ← 4N|ALTOK|<h/c>|<服务器看到的这个地址>。同一族的不算（那不是"另一族"）；旧服务端不认 ALT，丢掉，客户端照旧
             if (f[2] === 'h') {
                 const id = byKey.get(clean(f[3], 64));
                 const room = id && rooms.get(id);
@@ -1142,15 +1142,15 @@ function onControl(f, from, text) {
             send(`${WS}|RELAYON|${s.sid}`, from === s.a ? s.b : s.a);
             return;
         }
-        case 'SREPORT': {      // §240 服务器房：玩家低频上报（校验 / 计分 / 捡道具用；§241 头里带会话口令）
+        case 'SREPORT': {      // 服务器房：玩家低频上报（校验 / 计分 / 捡道具用； 头里带会话口令）
             if (serverRoom) serverRoomReport(serverRoom, from, f, now);
             return;
         }
-        case 'SCHAT': {        // §240 服务器房：聊天由服务器广播（§241 第 3 段 = 会话口令）
+        case 'SCHAT': {        // 服务器房：聊天由服务器广播（第 3 段 = 会话口令）
             if (serverRoom) serverRoomChat(serverRoom, from, clean(f[2], 32), f.slice(3).join('|'), Buffer.byteLength(text), now);
             return;
         }
-        case 'SRELAY': {       // §240 服务器房：直连不通，请求服务器替这一对中转（§241 第 4 段 = 会话口令）
+        case 'SRELAY': {       // 服务器房：直连不通，请求服务器替这一对中转（第 4 段 = 会话口令）
             const room = serverRoom;
             const p = room && serverRoomAuth(room, from, clean(f[3], 32), 'srelay', Buffer.byteLength(text), now);
             if (!room || !p) return;
@@ -1181,9 +1181,9 @@ function onRelay(buf, from) {
     const s = sessions.get(buf.toString('utf8', FWD_LEN, nl));
     if (!s) { stats.dropped++; return; }
     const room = rooms.get(s.room);
-    if (room && room.mpMax > 0) { stats.dropped++; return; }     // §284 多人房一律直连，不走中转
+    if (room && room.mpMax > 0) { stats.dropped++; return; }     // 多人房一律直连，不走中转
     if (!s.relay) { stats.dropped++; ctr(s).early++; return; }
-    const side = sideOf(s, from);           // §131 端口换了也认（按会话号 + IP）
+    const side = sideOf(s, from);           // 端口换了也认（按会话号 + IP）
     if (!side) {
         stats.dropped++;
         const c = ctr(s);
@@ -1204,35 +1204,35 @@ function onRelay(buf, from) {
     send(buf, to);
 }
 
-// §141 观战人数（顺带移出 6 秒没保活的）
-// §223.4 现在的观战者都会拼省流观战包（WATCH 第 6 段 dz）
+// 观战人数（顺带移出 6 秒没保活的）
+// 现在的观战者都会拼省流观战包（WATCH 第 6 段 dz）
 function allWatchDz(room) {
     return !!room.watchers && room.watchers.size > 0 && [...room.watchers.values()].every((v) => v.dz);
 }
 
-// 主机的 REGOK：房间号 / 主机公网地址 / 观战人数 / 有没有第二位 / §223.4 观战者都会拼省流包（旧主机不看第 7 段）
+// 主机的 REGOK：房间号 / 主机公网地址 / 观战人数 / 有没有第二位 / 观战者都会拼省流包（旧主机不看第 7 段）
 function regok(room, id, hostAddr, now) {
     const nw = watchCount(room, now);
     room.lastAllDz = allWatchDz(room);
     return `${WS}|REGOK|${id}|${hostAddr}|${nw}|${room.second && room.watchers?.has(room.second) ? 1 : 0}|${room.lastAllDz ? 1 : 0}`;
 }
 
-// §327 PEER：第 7 段 = 桥接 ID（没有就空着），第 8 段 = 对方另一族的地址（没有就不带这段；旧客户端只看前 7 段）
+// PEER：第 7 段 = 桥接 ID（没有就空着），第 8 段 = 对方另一族的地址（没有就不带这段；旧客户端只看前 7 段）
 function peerMsg(id, sid, main, local, bridge, other) {
     return `${WS}|PEER|${id}|${sid}|${main}|${local}` + (other ? `|${bridge || ''}|${other}` : bridge ? `|${bridge}` : '');
 }
-// §327 介绍一端给对方：对方那一族的地址放前面（第 5 段），另一个放第 8 段
+// 介绍一端给对方：对方那一族的地址放前面（第 5 段），另一个放第 8 段
 function introAddrs(main, alt, toward) {
     if (alt && famOf(alt) !== famOf(main) && famOf(alt) === famOf(toward)) return [alt, main];
     return [main, alt || ''];
 }
 const liveAlt = (a, seen, now) => (a && now - (seen || 0) <= ROOM_TTL ? a : '');
 
-// 0.34 评审：按来源 IP + 用途限速（STATUS / CFGQ 反射放大、Steam 房介绍收割）。表每分钟清一次过期项
+// 0.34 评审：按来源 IP + 用途限速（STATUS / CFGQ 反射放大、桥接平台房介绍收割）。表每分钟清一次过期项
 const rateTab = new Map();
 let rateSweep = 0;
 function rateOk(from, what, everyMs, now) {
-    const ip = from.lastIndexOf(':') > 0 ? ipOf(from) : from;     // §327 [IPv6]:端口 也按地址算
+    const ip = from.lastIndexOf(':') > 0 ? ipOf(from) : from;     // [IPv6]:端口 也按地址算
     const k = ip + '|' + what;
     if (now - rateSweep > 60_000) { rateSweep = now; for (const [kk, t] of rateTab) if (now - t > 120_000) rateTab.delete(kk); }
     const last = rateTab.get(k) || 0;
@@ -1247,7 +1247,7 @@ function watchCount(room, now) {
     return room.watchers.size;
 }
 
-// §141.7 主机心跳时看一次：有过对手、现在没满、有人排队 → 叫队首（跳过刚下场的）。满了就取消（多人房不用）
+// 主机心跳时看一次：有过对手、现在没满、有人排队 → 叫队首（跳过刚下场的）。满了就取消（多人房不用）
 function queueTick(room, now) {
     if (room.mpMax > 0 || !room.watch || !room.watchers?.size) { room.reserve = null; return; }
     if (room.full) { room.hadPeer = true; room.reserve = null; return; }
@@ -1261,7 +1261,7 @@ function queueTick(room, now) {
     send(`${WS}|YOURTURN|${room.id}|${room.reserve.token}`, room.reserve.ep);
 }
 
-// §141 4NW|<房间号>\n<包>：主机上传的观战包，原样发给这个房间的每个观战者。只认这个房间登记的主机端点
+// 4NW|<房间号>\n<包>：主机上传的观战包，原样发给这个房间的每个观战者。只认这个房间登记的主机端点
 function onWatchUp(buf, from) {
     const nl = buf.indexOf(10);
     if (nl < 0 || nl > 24) { stats.dropped++; return; }
@@ -1271,12 +1271,12 @@ function onWatchUp(buf, from) {
     const r = room.wrate ?? (room.wrate = { sec, n: 0 });
     if (r.sec !== sec) { r.sec = sec; r.n = 0; }
     if (++r.n > WATCH_RATE) { stats.dropped++; return; }
-    // §223.6 省流包（包里有 dz=1 一行）只发给会拼的观战者：旧版观战者刚进来、主机还没收到 REGOK 改发完整包的那一小会儿，宁可少收几包也不收拼不了的
+    // 省流包（包里有 dz=1 一行）只发给会拼的观战者：旧版观战者刚进来、主机还没收到 REGOK 改发完整包的那一小会儿，宁可少收几包也不收拼不了的
     const dz = buf.includes('\ndz=1\n');
     for (const [w, v] of room.watchers) { if (w === room.second || (dz && !v.dz)) continue; stats.relayed++; send(buf, w); }
 }
 
-// §141.8 主机下场时第二位选手和主机之间的包：4NV（第二位 → 主机）、4NU（主机 → 第二位）
+// 主机下场时第二位选手和主机之间的包：4NV（第二位 → 主机）、4NU（主机 → 第二位）
 function onSecond(buf, from, up) {
     const nl = buf.indexOf(10);
     if (nl < 0 || nl > 24) { stats.dropped++; return; }
@@ -1307,7 +1307,7 @@ function upstreamAt(from) {
 
 // 别的服务器推来的房间：所在服务器 = 来源地址
 function onPush(lines, from) {
-    // 评审提过『只收配置过的上游』——不行：PUSH 是下游推给上游、上游不配下游（文件头 §50 的设计），限制了互通就断。假房注入靠 MAX_REMOTE_PER_SOURCE 兜底，记在 HANDOVER §250.12
+    // 评审提过『只收配置过的上游』——不行：PUSH 是下游推给上游、上游不配下游（文件头 的设计），限制了互通就断。假房注入靠 MAX_REMOTE_PER_SOURCE 兜底，记在
     const now = Date.now();
     let have = 0;
     for (const r of remote.values()) if (r.via === from) have++;
@@ -1343,7 +1343,7 @@ function upstreamTick() {
         if (!u.ep || now - u.lookedUp > 60_000) {
             u.lookedUp = now;
             const [host, port] = splitHostPort(u.addr, 27020);
-            // §327 先找 IPv4（和以前一样）；没有 IPv4、这台又开了 IPv6 才用 IPv6
+            // 先找 IPv4（和以前一样）；没有 IPv4、这台又开了 IPv6 才用 IPv6
             dns.lookup(host, { all: true }, (err, addrs) => {
                 const a = !err && (addrs.find((x) => x.family === 4) || (sockFor('', 6) ? addrs.find((x) => x.family === 6) : null));
                 if (!a) { log(`[upstream] 解析不了 ${u.addr}：${err ? err.message : '没有能用的地址'}`); return; }
@@ -1365,22 +1365,22 @@ function upstreamTick() {
 function onMessage(buf, rinfo, rs) {
     stats.rx++;
     const from = ep(rinfo);
-    if (multiV6 && rs.kind !== 4 && famOf(from) === 6) {     // §327 同一族好几个 socket：记着从哪个收到的，回包从它出去
+    if (multiV6 && rs.kind !== 4 && famOf(from) === 6) {     // 同一族好几个 socket：记着从哪个收到的，回包从它出去
         const now = Date.now();
         lastIn.set(from, [rs, now]);
         if (lastIn.size > 20000) for (const [k, v] of lastIn) if (now - v[1] > 600_000) lastIn.delete(k);
     }
     const up = upstreams.size > 0 ? upstreamAt(from) : null;
     // 上游回的列表可能比一个普通包大（40 个房间）；其余来源超长的一律丢
-    // §269.21 观战 / 中转 / 第二位转发的是完整状态包（实测 2.4–2.6 KB），以前一律按 1400 丢 = 服务器大厅观战、中转对局全收不到；
+    // 观战 / 中转 / 第二位转发的是完整状态包（实测 2.4–2.6 KB），以前一律按 1400 丢 = 服务器大厅观战、中转对局全收不到；
     // 这四种转发包放宽到 MAX_FWD，控制包仍按 MAX_PACKET
     if (buf.length > MAX_PACKET && !up && !(buf.length <= MAX_FWD && FWD_HEADS.has(buf.toString('latin1', 0, FWD_LEN)))) { stats.dropped++; return; }
     if (buf.length > FWD_LEN && buf.toString('latin1', 0, FWD_LEN) === `${WP}R|`) { onRelay(buf, from); return; }
     if (buf.length > FWD_LEN && buf.toString('latin1', 0, FWD_LEN) === `${WP}W|`) { onWatchUp(buf, from); return; }
     if (buf.length > FWD_LEN && buf.toString('latin1', 0, FWD_LEN) === `${WP}V|`) { onSecond(buf, from, true); return; }
     if (buf.length > FWD_LEN && buf.toString('latin1', 0, FWD_LEN) === `${WP}U|`) { onSecond(buf, from, false); return; }
-    if (buf.length > SSTATE.length && buf.toString('latin1', 0, SSTATE.length) === SSTATE) { if (serverRoom) serverRoomState(serverRoom, from, buf.toString('utf8'), Date.now()); return; }     // §240 观战转发（带状态包原文；§241 带会话口令）
-    if (buf.length > SRLY.length && buf.toString('latin1', 0, SRLY.length) === SRLY) { if (serverRoom) serverRoomRelay(serverRoom, from, buf.toString('utf8'), Date.now()); return; }        // §240 服务器中转（§241 带会话口令）
+    if (buf.length > SSTATE.length && buf.toString('latin1', 0, SSTATE.length) === SSTATE) { if (serverRoom) serverRoomState(serverRoom, from, buf.toString('utf8'), Date.now()); return; }     // 观战转发（带状态包原文； 带会话口令）
+    if (buf.length > SRLY.length && buf.toString('latin1', 0, SRLY.length) === SRLY) { if (serverRoom) serverRoomRelay(serverRoom, from, buf.toString('utf8'), Date.now()); return; }        // 服务器中转（带会话口令）
     let text = buf.toString('utf8');
     const isAlias = WALIAS !== '' && WALIAS !== WS && text.startsWith(WALIAS + '|');
     if (isAlias) text = `${WS}|` + text.slice(WALIAS.length + 1);     // 别名：内部按 WS 处理
@@ -1401,7 +1401,7 @@ setInterval(() => {
             sessions.delete(s.sid);
             log(`[session] 会话 ${s.sid} 超时删除`);
             if (s.ctr) relaySummary(s, '结束');
-        } else if (s.relay) relaySummary(s, '定时');   // §133 中转中每 2 秒看一次，有变化才写
+        } else if (s.relay) relaySummary(s, '定时');   // 中转中每 2 秒看一次，有变化才写
     }
     for (const [k, r] of remote) if (now - r.seen > ROOM_TTL) remote.delete(k);
     if (ranked) ranked.tick();
@@ -1418,10 +1418,10 @@ setInterval(() => {
 
 if (ROOM_KIND) {
     serverRoom = createServerRoom();
-    setInterval(() => serverRoomTick(Date.now()), 500).unref();      // §240 服务器房：0.5 秒看一次计时 / 掉线 / 开打
+    setInterval(() => serverRoomTick(Date.now()), 500).unref();      // 服务器房：0.5 秒看一次计时 / 掉线 / 开打
 }
 
-// §327 开 socket：每个 --host 一个。默认 :: 开不了（系统关了 IPv6）就退回 0.0.0.0（只有 IPv4，和以前一样）
+// 开 socket：每个 --host 一个。默认 :: 开不了（系统关了 IPv6）就退回 0.0.0.0（只有 IPv4，和以前一样）
 function bindOne(host) {
     return new Promise((resolve, reject) => {
         const v6 = host.includes(':');
@@ -1455,7 +1455,7 @@ multiV6 = socks.filter((s) => s.kind !== 4).length > 1;
     const where = socks.map((s) => `${fmtEp(s.host, s.sock.address().port)}${s.kind === 46 ? '（IPv4 + IPv6）' : ''}`).join('、');
     console.log(`[server] 4net 大厅服务器已启动：UDP ${where}`
         + (RELAY_MATCH ? '；对局中转开' : '；对局中转关') + (RELAY_WATCH ? '；观战转发开' : '；观战转发关（--relay 两个都开，--relay-watch 只开观战）')
-        + (ranked ? `；武林盟主排位开（${RANKED_FILE}）` : '')
+        + (ranked ? `；排位开（${RANKED_FILE}）` : '')
         + (serverRoom ? `；服务器自己开房 ${serverRoom.id}（${serverRoom.kind === 'mp' ? serverRoom.size + ' 人混战' : '1v1'}）` : '')
         + (BANS_FILE ? `；排位封禁名单（${BANS_FILE}）` : '')
         + (upstreams.size ? `；互通上游 ${[...upstreams.keys()].join(', ')}` : ''));

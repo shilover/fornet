@@ -1,4 +1,4 @@
--- fornet_ext.lua：扩展包（docs/EXTENSIONS.md，X1；F5 前叫 game_ext.lua）。基底启动时扫 <模组目录>\ext\<名>\，每个包 = manifest.txt + init.lua（+ 可选 lobby_<名>.dll，X2）。
+-- fornet_ext.lua：扩展包（X1；F5 前叫 game_ext.lua）。基底启动时扫 <模组目录>\ext\<名>\，每个包 = manifest.txt + init.lua（+ 可选 lobby_<名>.dll，X2）。
 -- init.lua 跑在只有 API + 标准库副本的沙箱里（拿不到 require / io / os.* / _G / NETUI / LO / PIPE），所有对外发包只能经 API.lobby.cmd，
 -- 基底在那里查该包登记的同意键；没登记 / 没同意一律拒。面板"系统设置 → 已加载的扩展…"列出每个包、同意状态、停用开关。
 -- 不改任何现有行为：没有 ext\ 目录或目录为空时，这个模块只多一页"无扩展"。
@@ -14,9 +14,9 @@ return function(ctx)
     local MODDIR = tostring(ROOT):match("([^/\\]+)[/\\]*$") or "mod"     -- F5：提示里写模组自己的目录名，不写死游戏的
     if type(CONSENT) == "table" then CONSENT.extRoute = true; CONSENT.EXT_OWN = CONSENT.EXT_OWN or {} end     -- 11-13：扩展包的同意项去 ext:<包名> 插件页问（fornet_ui CONSENT.ask）
     local EXT = { list = {}, byName = {}, DIR = ROOT .. "/ext", BASE_VER = ctx.VERSION or "0", API_VER = 2 }
-    -- L3（docs/FORNET_LAYERS.md）：同意项的主人可能是玩法 mod（排位，mods\ranked）而不是插件；只有真是插件的才去 ext:<包名> 页问，mod 的走基底确认页
+    -- L3：同意项的主人可能是玩法 mod（排位，mods\ranked）而不是插件；只有真是插件的才去 ext:<包名> 页问，mod 的走基底确认页
     if type(CONSENT) == "table" then CONSENT.extHas = function(n) return EXT.byName[n] ~= nil end end
-    if type(CONSENT) == "table" then CONSENT.extSvc = function() for _, p in ipairs(EXT.list or {}) do if p.state == "on" and p.svc then return p.svc end end end end     -- 11-15 fornet_ui NETUI.friendsName 兜底   -- §268.2：F4c-2 / F4c-3 起是 API 2（consent.registerBase / native.load），以前漏改成 1 = ext/steam、ext/ranked 一直 bad
+    if type(CONSENT) == "table" then CONSENT.extSvc = function() for _, p in ipairs(EXT.list or {}) do if p.state == "on" and p.svc then return p.svc end end end end     -- 11-15 fornet_ui NETUI.friendsName 兜底 -- ：F4c-2 / F4c-3 起是 API 2（consent.registerBase / native.load），以前漏改成 1 = ext/桥接平台、ext/ranked 一直 bad
 
     -- ---------------------------------------------------------------- 工具
     local function exists(path) local f = io.open(path, "rb"); if f then f:close(); return true end; return false end
@@ -134,10 +134,10 @@ return function(ctx)
         end
         function api.lobby.onReply(fn) if type(fn) == "function" then p.onReply[#p.onReply + 1] = fn end end
 
-        -- 只读：这局的传输路（"udp" 直连 / "bridge" 经扩展包的桥接 DLL）。第三方 mod 可以据此选在桥接房里不发自己的字段（docs/EXTENSIONS.md §6）
+        -- 只读：这局的传输路（"udp" 直连 / "bridge" 经扩展包的桥接 DLL）。第三方 mod 可以据此选在桥接房里不发自己的字段
         api.net = { transport = function() local ok, v = pcall(ctx.transport); return ok and v or "udp" end }
         -- F4c-2：把本包目录里的一个原生 DLL 载进游戏进程（package.loadlib 的 "*" 只 LoadLibrary，不用 Lua 的 C 接口）。
-        -- 只认本包目录下的文件、名字只能是 字母数字_-.dll；装一个扩展包 = 同意运行它的代码，这里不再弹窗。桥接 DLL（例如 Steam 的）就是这样进来的
+        -- 只认本包目录下的文件、名字只能是 字母数字_-.dll；装一个扩展包 = 同意运行它的代码，这里不再弹窗。桥接 DLL（例如桥接平台的）就是这样进来的
         api.native = {}
         function api.native.load(dllName)
             if type(dllName) ~= "string" or not dllName:match("^[%w_%-]+%.dll$") then error("native.load：文件名要是 <字母数字_->.dll", 2) end
@@ -154,7 +154,7 @@ return function(ctx)
     end
 
     -- ---------------------------------------------------------------- 加载一个包
-    -- 11-13 用户定：扩展包默认停用。目录里有 on.txt 才加载（面板插件页"启用"写它、"停用"删它，都是下次启动生效）。
+    -- 11-13 定：扩展包默认停用。目录里有 on.txt 才加载（面板插件页"启用"写它、"停用"删它，都是下次启动生效）。
     -- 以前的 off.txt 不再看（没有 on.txt 一律停用）；启用时顺手删掉留下的 off.txt
     function EXT.onFile(name) return EXT.DIR .. "/" .. name .. "/on.txt" end
     function EXT.offFile(name) return EXT.DIR .. "/" .. name .. "/off.txt" end
@@ -185,7 +185,7 @@ return function(ctx)
         end
         if mf.api and tonumber(mf.api) and tonumber(mf.api) > EXT.API_VER then p.state, p.why = "bad", T("需要 API " .. mf.api, "needs API " .. mf.api); return p end
         p.adapter, p.client = mf.adapter, mf.client
-        p.svc = mf.svc     -- 11-15 桥接服务的显示名（manifest svc=，如 Steam）：联机程序还没和桥接 DLL 握手时，好友标签先用它
+        p.svc = mf.svc     -- 11-15 桥接服务的显示名（manifest svc=，如桥接平台）：联机程序还没和桥接 DLL 握手时，好友标签先用它
         if EXT.disabled(name) then p.state = "off"; return p end
         for item in tostring(mf.consent or ""):gmatch("[^,%s]+") do     -- consent=@ranked：基底键 ranked 的文案 / 同意由本包管（插件页里问）
             local k = item:match("^@([%w_]+)$")
@@ -278,7 +278,7 @@ return function(ctx)
         return pg and T(pg.title, pg.titleEn or pg.title) or nil
     end
     -- 11-13 拆干净：每个包自动有一个插件页 ext:<包名>——包的说明、它的全部同意项（完整文案 / 同意 / 撤回）、待同意的操作、自己的页、停用开关。
-    -- 基底的面板和隐私说明里不出现扩展包的任何文案（Steam / 排位等）；基底要用到扩展包的同意项时跳到这里（CONSENT.ask）
+    -- 基底的面板和隐私说明里不出现扩展包的任何文案（桥接平台 / 排位等）；基底要用到扩展包的同意项时跳到这里（CONSENT.ask）
     local function wrap(items, line, indent, col)
         if type(CONSENT) == "table" and type(CONSENT.wrap) == "function" then CONSENT.wrap(items, line, indent, col)
         else items[#items + 1] = { label = (indent or "") .. line, col = col } end

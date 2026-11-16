@@ -1,8 +1,8 @@
 @echo off
 rem Build the lobby helper with the csc.exe that ships with Windows (.NET Framework 4).
-rem   build.bat          %FORNET_EXE%.exe (the base; the bridge transport Bridge.cs is generic and always compiled, inert without a bridge DLL)
-rem   build.bat release  %FORNET_EXE%-release.exe = same sources (kept for the release / export scripts)
-rem   build.bat base     %FORNET_EXE%-base.exe = same sources (tests\run_all.py builds this one)
+rem build.bat %FORNET_EXE%.exe (the base; the bridge transport Bridge.cs is generic and always compiled, inert without a bridge DLL)
+rem build.bat release %FORNET_EXE%-release.exe = same sources (kept for the release / export scripts)
+rem build.bat base %FORNET_EXE%-base.exe = same sources (tests\run_all.py builds this one)
 rem FORNET_EXE = output name without .exe, default FornetLobby.
 rem Game-specific C# (a local AI opponent, the game's names, its wire names for WireTag.cs) is not part of the base: set FORNET_GAME_CS
 rem to a ;-separated list of absolute .cs paths and they are compiled in (the AOT project reads the same variable).

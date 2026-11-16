@@ -1,4 +1,4 @@
-// RankedApi.cs —— 排位（武林盟主）在联机程序里的接缝（F4c-1，docs/EXTENSIONS.md §4 / §10.4）。
+// RankedApi.cs —— 排位（排位）在联机程序里的接缝（F4c-1， /）。
 // 基底（Program.cs / Session / ServerLobby）只认这里的接口；Ranked.cs 的 RankClient / MatchStats 实现它们，编译时带 /define:RANKED 才登记
 // （build.bat 的 dev / release 都带；`build.bat base` 不带 = 没有排位的基底，连接方式里也没有 ranked）。
 // 这是以后把排位搬成插件（lobby_ranked.dll）的边界：插件要能顶替的就是 IRankedClient 这一张表。
@@ -8,7 +8,7 @@ using System.Text;
 
 namespace ForNet
 {
-    // 一局里本机 / 对方包的武器 / 招式统计（§110.11）。Session 的发包线程记本机包，房间连接的收包线程记对方包
+    // 一局里本机 / 对方包的武器 / 招式统计。Session 的发包线程记本机包，房间连接的收包线程记对方包
     interface IMatchStats
     {
         void Start();
@@ -18,7 +18,7 @@ namespace ForNet
         string Payload();
     }
 
-    // 排位客户端：密钥 / 上报 / 排行榜 / 统计 / lobby.txt 字段（§110）
+    // 排位客户端：密钥 / 上报 / 排行榜 / 统计 / lobby.txt 字段
     interface IRankedClient
     {
         int Support { get; }            // 这台大厅服务器开没开排位：-1 还不知道，0 没开，1 开了
@@ -48,7 +48,7 @@ namespace ForNet
         public static string[] Modes(string[] all) { return Available ? all : Array.FindAll(all, x => x != "ranked"); }
     }
 
-    // 没有排位的基底：服务器"没开排位"（Support 0 → 面板不列武林盟主），别的都是空操作
+    // 没有排位的基底：服务器"没开排位"（Support 0 → 面板不列排位），别的都是空操作
     sealed class NoRanked : IRankedClient
     {
         public int Support { get { return 0; } }
@@ -67,7 +67,7 @@ namespace ForNet
         public void Close() { }
     }
 
-    // F4c-3：排位搬成扩展包插件 ext\ranked\lobby_ranked.dll（docs/EXTENSIONS.md §4.3）之后，基底这头的 IRankedClient 实现：
+    // F4c-3：排位搬成扩展包插件 ext\ranked\lobby_ranked.dll之后，基底这头的 IRankedClient 实现：
     // 所有调用转成 Ext.Cmd("ranked", k=v)，字段从插件的私有回话（_rk* 等，Ext.Reply）读回，WriteLobby 写出和以前一字不差的 rk* 行；
     // 会话信息每轮以快照推给插件（它不认 Session）。插件没装 / 停用（off.txt）时 RankedSupport.Make 给 NoRanked。协议见 ranked/RankedPlugin.cs 文件头
     sealed class PluginRanked : IRankedClient
@@ -143,7 +143,7 @@ namespace ForNet
         public void Close() { }
     }
 
-    // §110.11 本机 / 对方包的统计：Session 的发包线程、房间连接的收包线程直接推给插件（它那头 MatchStats 自己加锁）
+    // 本机 / 对方包的统计：Session 的发包线程、房间连接的收包线程直接推给插件（它那头 MatchStats 自己加锁）
     sealed class PluginStats : IMatchStats
     {
         static void Send(string stat, params string[] kv)

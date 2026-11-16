@@ -1,22 +1,22 @@
-# fornet 仓库自带测试（11-13 测试分家，HANDOVER §274）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_server_lobby.py
+# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_server_lobby.py
 # 服务器大厅（mode=server）离线测试：本地起服务端 fornet/server/fornet-lobby-server.mjs + 两个后台联机程序实例（各用自己的 --dir），
 # 不开游戏、不碰 27015 / 27016（服务器大厅的游戏端口是系统随机分配的）。
-#   python -I test_server_lobby.py <FornetLobby.exe> <工作目录> [服务器端口，默认 27120 | 外部服务器 域名:端口]
+# python -I test_server_lobby.py <FornetLobby.exe> <工作目录> [服务器端口，默认 27120 | 外部服务器 域名:端口]
 # 第 3 个参数带域名 / IP（比如 lobby.example.com:27020）时不起本地服务端，直接测那台（两个实例在同一台电脑、同一个 NAT 后面，
 # 直连走的是局域网地址那条候选；中转是真的经过那台服务器）；服务端日志那项跳过。
 # 三段：
-#   1) 直连：A 建房 → B 的列表里出现 → B 加入 → 打洞直连成功、双向收包、线路 = direct
-#   2) 0.34（TASK_0.34 最终方案 3）：对局不再经服务器中转。一边加 --sim-no-direct（丢掉所有不是服务器发来的包 = 只有单向通），主机丢 / 客机丢各一次
-#      → 3 次直连都失败 → srverr 提示"对局走桥接"那条路、不请求中转、线路从不变成 relay、重新加入接着试直连（回到 punch1）
-#   2c) 服务端没开 --relay：客机同样不请求中转，提示一样（服务器开没开中转对客机没区别了）
-#   （旧的 2d / 2e"客机 / 主机设置里允许中转"随设置项一起删了）
-#   2f) §134 主机进不来也收不到中转（校园网那种）：测试脚本自己当主机登记房间、什么都不回 → 客机直连 3 次不通、
-#      中转一个包都没收到 → srverr 提示"校园网 … 让对方建房"，重新加入、接着试直连时提示还在
-#   3) 服务器没开：大厅地址填一个没人听的端口 → lobby.txt 的 srverr 报"没回应"
-#   4) 服务器互通（只在本地模式跑）：再起两台服务端 B、A，只有 A 配 --upstream B。
-#      主机在 B、客机连 A → 客机列表里出现 [互通] 房间、加入去 B、直连；主机在 A、客机连 B（B 靠 A 推送看到）→ 客机丢直连包 → 经 A 中转
-#   §130 每段再看两边的连接诊断 net\net_conn.log：有对应的事件行（直连成功 / 请求中转 / 服务器同意 / 中转第一个包 /
-#      对方没动静 / norelay / hostnorelay / 服务器没回应），且里面没有完整 IP（脱敏成前两段 + 短哈希）
+# 1) 直连：A 建房 → B 的列表里出现 → B 加入 → 打洞直连成功、双向收包、线路 = direct
+# 2) 0.34（最终方案 3）：对局不再经服务器中转。一边加 --sim-no-direct（丢掉所有不是服务器发来的包 = 只有单向通），主机丢 / 客机丢各一次
+# → 3 次直连都失败 → srverr 提示"对局走桥接"那条路、不请求中转、线路从不变成 relay、重新加入接着试直连（回到 punch1）
+# 2c) 服务端没开 --relay：客机同样不请求中转，提示一样（服务器开没开中转对客机没区别了）
+# （旧的 2d / 2e"客机 / 主机设置里允许中转"随设置项一起删了）
+# 2f) 主机进不来也收不到中转（校园网那种）：测试脚本自己当主机登记房间、什么都不回 → 客机直连 3 次不通、
+# 中转一个包都没收到 → srverr 提示"校园网 … 让对方建房"，重新加入、接着试直连时提示还在
+# 3) 服务器没开：大厅地址填一个没人听的端口 → lobby.txt 的 srverr 报"没回应"
+# 4) 服务器互通（只在本地模式跑）：再起两台服务端 B、A，只有 A 配 --upstream B。
+# 主机在 B、客机连 A → 客机列表里出现 [互通] 房间、加入去 B、直连；主机在 A、客机连 B（B 靠 A 推送看到）→ 客机丢直连包 → 经 A 中转
+# 每段再看两边的连接诊断 net\net_conn.log：有对应的事件行（直连成功 / 请求中转 / 服务器同意 / 中转第一个包 /
+# 对方没动静 / norelay / hostnorelay / 服务器没回应），且里面没有完整 IP（脱敏成前两段 + 短哈希）
 import os, re, sys, time, socket, subprocess, threading
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -25,7 +25,7 @@ exe, base = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
 arg3 = sys.argv[3] if len(sys.argv) > 3 else "27120"
 external = ":" in arg3
 if not external:
-    os.environ.setdefault("FORNET_LOOPBACK", "1")   # §125 本地服务端时联机程序只绑 127.0.0.1（测外部服务器要走真网卡，不设）
+    os.environ.setdefault("FORNET_LOOPBACK", "1")   # 本地服务端时联机程序只绑 127.0.0.1（测外部服务器要走真网卡，不设）
 sport = 27120 if external else int(arg3)
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 server_js = os.path.join(root, "server", "fornet-lobby-server.mjs")
@@ -86,7 +86,7 @@ def connlog(d):
 
 
 def check_log(tag, d, needles, sec=0):
-    """§130：d 的 net_conn.log 里每个 needle 都有（最多等 sec 秒），且没有完整 IPv4"""
+    """：d 的 net_conn.log 里每个 needle 都有（最多等 sec 秒），且没有完整 IPv4"""
     t0 = time.time()
     text = connlog(d)
     while sec > 0 and time.time() - t0 < sec and not all(n in text for n in needles):
@@ -120,7 +120,7 @@ PORTS = {}
 
 
 def blocked(server):
-    """§134 假主机：只每秒发 REG 保住房间，打洞包、中转包一概不回（= 校园网主机：外面进不来、到服务器的高频包被限流）"""
+    """假主机：只每秒发 REG 保住房间，打洞包、中转包一概不回（= 校园网主机：外面进不来、到服务器的高频包被限流）"""
     host, port = server.rsplit(":", 1)
     srv = (host, int(port))
     sk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

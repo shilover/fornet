@@ -1,6 +1,6 @@
-# fornet 仓库自带测试（11-13 测试分家，HANDOVER §274）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_ext_lobby.py
+# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_ext_lobby.py
 # X2 扩展包的联机程序插件（lobby/Ext.cs）：真的 FornetLobby.exe + 示例 C 插件 samples/hello/lobby_hello.dll（先跑 build_hello.bat）。
-#   python -I test_ext_lobby.py <FornetLobby.exe> <工作目录>
+# python -I test_ext_lobby.py <FornetLobby.exe> <工作目录>
 # ① 启动后 lobby.txt 有 extp=hello、x.hello.ver=0.1.0（fnx_init 里 reply）
 # ② cmd ext plugin=hello ping=1 → x.hello.pong=1
 # ③ 没同意 ext_hello_share：send 被拒 → x.hello.sent=denied；本地监听的 UDP 口收不到

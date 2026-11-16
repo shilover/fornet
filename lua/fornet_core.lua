@@ -1,21 +1,21 @@
--- fornet_core.lua —— fornet（4net）UE4SS 网络核的第一块（docs/EXTENSIONS.md §10.4 F3；docs/FORNET_SPLIT.md）。
--- 从游戏模组的 main.lua 原样搬出来的游戏无关部分：文件读写（经管道优先）、§83 / §84 命名管道、中英文切换、本地偏好 PREF。
+-- fornet_core.lua —— fornet（4net）UE4SS 网络核的第一块（F3）。
+-- 从游戏模组的 main.lua 原样搬出来的游戏无关部分：文件读写（经管道优先）、 命名管道、中英文切换、本地偏好 PREF。
 -- 不碰任何游戏对象（zhFont 只用 UE4SS 的 StaticFindObject / LoadAsset 找字体，字体路径由调用方给）。
 -- 用法：local FN = require("fornet_core")({ out=, NET_DIR=, F_LOCAL=, valid=, short=, pathOf=, zhFont= })
---   FN.fileWrite / FN.fileReadKV / FN.PIPE / FN.LANG / FN.langPoll / FN.T / FN.PREF
+-- FN.fileWrite / FN.fileReadKV / FN.PIPE / FN.LANG / FN.langPoll / FN.T / FN.PREF
 return function(ctx)
     local out, NET_DIR, F_LOCAL = ctx.out, ctx.NET_DIR, ctx.F_LOCAL
     local valid, short, pathOf = ctx.valid or function(o) return o ~= nil end, ctx.short or tostring, ctx.pathOf or tostring
     local C = {}
     local fileReadKV     -- 下面定义；PIPE.tryConnect 要用
 
-    -- ============================================================ §83 命名管道：游戏 ↔ 联机程序的状态包走内存
+    -- ============================================================ 命名管道：游戏 ↔ 联机程序的状态包走内存
     -- 以前每秒各写 30 次 state_local.txt / state_remote.txt：读刚被联机程序换掉的文件要等杀毒扫描（平均 3.6–6.5 ms、
     -- 最长 20+ ms，全压在游戏线程上），还磨硬盘。联机程序（GamePipe.cs，协议见它的文件头）写 net\pipe.txt（name=…），
     -- 这里连 \\.\pipe\<name>.up（写）/ .down（读）。连不上 / 读写出错 → 关掉、退回文件交接，PIPE.RETRY 秒后再试。
     -- Lua 的读是阻塞的：联机程序收到 "R" / "B" 立刻回话（专门的线程，不碰网络）；它退出了管道就断，读到 nil 不会卡住。
-    -- §84 以前的小文件也走管道：联机程序给的（DOWN）每次回话时带上变了的；游戏给的（UP）用 "U <文件名>" 发。
-    --   断开后联机程序把内存里最新的几份写回硬盘，这边照旧读写文件
+    -- 以前的小文件也走管道：联机程序给的（DOWN）每次回话时带上变了的；游戏给的（UP）用 "U <文件名>" 发。
+    -- 断开后联机程序把内存里最新的几份写回硬盘，这边照旧读写文件
     local PIPE = { on = false, retryAt = 0, RETRY = 5.0, name = nil, blob = {}, rev = {}, blobAt = 0, BLOB_SEC = 0.2, ups = {},
                    DOWN = { ["session.txt"] = true, ["lobby.txt"] = true, ["rel_in.txt"] = true, ["lang.txt"] = true },
                    UP = { ["cmd.txt"] = true, ["rel_out.txt"] = true },
@@ -37,7 +37,7 @@ return function(ctx)
         if PIPE.up then pcall(function() PIPE.up:close() end) end
         if PIPE.down then pcall(function() PIPE.down:close() end) end
         PIPE.up, PIPE.down = nil, nil
-        if PIPE.on then out("管道断开（%s），退回文件交接", tostring(why)); PIPE.lostAt = os.time() end   -- §99 NETUI.watchPipe 看着
+        if PIPE.on then out("管道断开（%s），退回文件交接", tostring(why)); PIPE.lostAt = os.time() end   -- NETUI.watchPipe 看着
         PIPE.on = false
         PIPE.retryAt = os.clock() + PIPE.RETRY
     end
@@ -74,7 +74,7 @@ return function(ctx)
     -- 问一次联机程序（"R" = 状态包 + 变了的文件，"B" = 只要变了的文件），返回状态包列表（kv 表，旧到新）；出错返回 nil
     function PIPE.ask(what)
         local list = {}
-        PIPE.waiting = what .. " 等回话"         -- §88 看门狗（另一个线程）据此报"卡在管道"
+        PIPE.waiting = what .. " 等回话"         -- 看门狗（另一个线程）据此报"卡在管道"
         local ok, err = pcall(function()
             assert(PIPE.up:write(what, "\n"))
             assert(PIPE.up:flush())
@@ -128,7 +128,7 @@ return function(ctx)
 
     -- ============================================================ 文件
     local function fileWrite(path, text)
-        -- §83 / §84 连着联机程序的管道：本机状态包、cmd.txt、rel_out.txt 走内存，不写文件
+        -- 连着联机程序的管道：本机状态包、cmd.txt、rel_out.txt 走内存，不写文件
         if path == F_LOCAL then
             if PIPE.send(text) then return true end
         else
@@ -154,7 +154,7 @@ return function(ctx)
         return false
     end
     fileReadKV = function(path)
-        -- §84 联机程序给的 session / lobby / rel_in / lang：连着管道就用它经管道给的（内存里最新一份），不读文件
+        -- 联机程序给的 session / lobby / rel_in / lang：连着管道就用它经管道给的（内存里最新一份），不读文件
         local n = PIPE.netName(path)
         if n and PIPE.DOWN[n] and PIPE.tryConnect() then
             PIPE.poll()
@@ -233,9 +233,9 @@ return function(ctx)
     end
 
     -- ============================================================ 耗时统计 PROF（F3c-2，原 main.lua 段）
-    -- 模组在游戏线程上每帧花多少：PROF.wrap(名字, 函数) 把要量的函数换成"计时 + 原函数"；每帧 PROF.frame() 数帧、记最长一帧、
+    -- 模组在游戏线程上每帧花多少：PROF.wrap(名字, 函数) 把要量的函数换成"计时 + 原函数"；每帧 PROF.frame 数帧、记最长一帧、
     -- 单帧尖峰写分项；联机时每 REPORT_SEC 秒写一行 [耗时]。os.clock 在 Windows 上是 QueryPerformanceCounter 的墙钟。
-    -- 适配层给：PROF.setTop(分项名列表)、PROF.online()（联机中）、PROF.frozen()（切图冻结中）、PROF.tag（日志前缀）；要包哪些函数也由适配层决定
+    -- 适配层给：PROF.setTop(分项名列表)、PROF.online（联机中）、PROF.frozen（切图冻结中）、PROF.tag（日志前缀）；要包哪些函数也由适配层决定
 local PROF = { on = true, acc = {}, at = nil, frames = 0, worst = 0, last = nil, REPORT_SEC = 10, IDLE_SEC = 60,
          TOP = {}, isTop = {}, fcur = 0, fmax = 0, fn = 0, fsum = 0,
          fk = {}, SPIKE_MS = 25, SPIKE_LOGS = 30, spikeLogs = 0 }
@@ -246,8 +246,8 @@ end
 function PROF.fin(k, t, ...)
     local d = (os.clock() - t) * 1000
     PROF.acc[k] = (PROF.acc[k] or 0) + d
-    PROF.fk[k] = (PROF.fk[k] or 0) + d                       -- §82.5 这一帧各分项（尖峰时写出来）
-    if PROF.isTop[k] then PROF.fcur = PROF.fcur + d end     -- §82.4 这一帧模组一共花了多少（单帧尖峰）
+    PROF.fk[k] = (PROF.fk[k] or 0) + d                       -- 这一帧各分项（尖峰时写出来）
+    if PROF.isTop[k] then PROF.fcur = PROF.fcur + d end     -- 这一帧模组一共花了多少（单帧尖峰）
     return ...
 end
 function PROF.wrap(k, fn)
@@ -270,7 +270,7 @@ function PROF.frame()
     PROF.frames = PROF.frames + 1
     local f = PROF.fcur
     PROF.fcur = 0
-    -- §82.5 单帧尖峰：模组这一帧花了 SPIKE_MS 以上，写出这一帧的分项（每次加载最多 SPIKE_LOGS 条）
+    -- 单帧尖峰：模组这一帧花了 SPIKE_MS 以上，写出这一帧的分项（每次加载最多 SPIKE_LOGS 条）
     if f >= PROF.SPIKE_MS and PROF.spikeLogs < PROF.SPIKE_LOGS then
         PROF.spikeLogs = PROF.spikeLogs + 1
         local its = {}

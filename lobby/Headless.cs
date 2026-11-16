@@ -1,4 +1,4 @@
-// §122 无界面替身：只在 AOT 版（lobby\aot\FornetLobbyAot.csproj → fornet_lobby.dll，在游戏进程里跑）编译，build.bat 的 exe 不用它。
+// 无界面替身：只在 AOT 版（lobby\aot\FornetLobbyAot.csproj → fornet_lobby.dll，在游戏进程里跑）编译，build.bat 的 exe 不用它。
 // NativeAOT 不支持 WinForms，但联机程序的逻辑都写在旧窗口 MainForm 里（定时器驱动、控件存着输入框的值）。
 // 这里按 MainForm 用到的那一小部分 WinForms 写了同名的无界面类型：控件只存值不画；定时器和 BeginInvoke 都排进
 // 一个专门的线程（Application.Run 的那个线程）按顺序执行——和 WinForms 一样单线程，所以 MainForm 的代码不用改。

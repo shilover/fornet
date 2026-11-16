@@ -1,10 +1,10 @@
-// 外部联机服务的桥接传输（F4c-2，docs/EXTENSIONS.md §4.2；原 SteamBridge.cs §120.11）。基底不碰任何平台 SDK、不知道任何 App ID：
+// 外部联机服务的桥接传输（F4c-2）。基底不碰任何平台 SDK、不知道任何 App ID：
 // 扩展包把一个"桥接 DLL"载进游戏进程（ext\<名>\init.lua 经 API.native.load），DLL 用游戏自己已经初始化好的平台服务，
 // 开命名管道 \\.\pipe\fornet_bridge_<<游戏进程>.exe 的 pid> 给本程序用；本程序只说这根管道的协议（帧格式和命令见扩展包里 DLL 的源码文件头）。
 // 分工：DLL 只搬数据（点对点连接、虚拟端口）和读联系人 / 在线状态；握手、可靠事件、房间、密码签名都在本程序（Wire / Session，BridgeLink）。
 // 找主机：主机的 DLL 把在线状态 fornet 设成 host；加入方从 DLL 拿"正在玩同一个游戏"的联系人，看这个键。
 // 桥连不上（没装扩展包、DLL 被关掉、游戏没开）时 bridge 方式不在面板里出现（Modes / ShownModes 看 Bridge.Available）。
-// 显示名（Svc）由 DLL 握手时报（h 的 svc=，例如 Steam）；没报就叫 Bridge。基底源码里不出现任何具体服务的实现。
+// 显示名（Svc）由 DLL 握手时报（h 的 svc=，例如桥接平台）；没报就叫 Bridge。基底源码里不出现任何具体服务的实现。
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -17,7 +17,7 @@ namespace ForNet
 {
     static class Bridge
     {
-        public static string Name = "Bridge";      // 真实服务名（桥接 DLL 握手报的 svc=，如 Steam）：只进日志和扩展包插件页；给玩家看的文字一律写"桥接"（§279，用户 11-13）
+        public static string Name = "Bridge";      // 真实服务名（桥接 DLL 握手报的 svc=，如桥接平台）：只进日志和扩展包插件页；给玩家看的文字一律写"桥接"
         public const int VPort = 27015;         // 我们的 P2P 虚拟端口
         public const int Proto = 1;             // 和桥接 DLL 的协议版本（h 里的 v=）
 
@@ -28,7 +28,7 @@ namespace ForNet
         public static string Error = L.T("游戏里的桥接没连上", "Bridge in the game is not connected");
         public static ulong MyId { get; private set; }
         public static string MyName = "";
-        public static bool LobbyOk { get; private set; }     // §124 桥有大厅接口（hello 的 lobby=1）
+        public static bool LobbyOk { get; private set; }     // 桥有大厅接口（hello 的 lobby=1）
         public static string PipeName = "";
 
         static NamedPipeClientStream pipe;
@@ -44,7 +44,7 @@ namespace ForNet
         static volatile bool presenceOk;      // 0.34：玩家开了"在最近里显示 " + Bridge.Svc + " 好友"且没隐身时才写富状态 / 读好友（桥命令 R）
         public static Action<uint, int, ulong> OnConnStatus = delegate { };       // 只有当前的 BridgeLink 订阅
 
-        // §125 连接诊断：和游戏里的 Steam 桥写同一个 net\steam_conn.log（桥那边带 [桥]，这边带 [联机]），只在事件发生时写一行。
+        // 连接诊断：和游戏里的桥接 DLL 写同一个 net\steam_conn.log（桥那边带 [桥]，这边带 [联机]），只在事件发生时写一行。
         // 两边可能同时写：都用共享读写打开、追加
         public static string LogDir = "";
         static readonly object logLock = new object();
@@ -90,7 +90,7 @@ namespace ForNet
             catch (Exception) { return false; }
         }
 
-        // 面板列不列 Steam 方式：桥连着，或者管道在（还没连）。5 秒内用上次的结果，免得每次画面板都查进程
+        // 面板列不列桥接平台方式：桥连着，或者管道在（还没连）。5 秒内用上次的结果，免得每次画面板都查进程
         static DateTime availAt = DateTime.MinValue;
         static bool avail;
         public static bool Available
@@ -113,7 +113,7 @@ namespace ForNet
                 if (pipe == null && !Connect()) { DiagOnce("连不上 " + Bridge.Name + " 桥：" + Error); return false; }
                 if (!Ready)
                 {
-                    // 连上了但游戏的 Steam 还没就绪：再问一次（dll 就绪时也会主动推 r）
+                    // 连上了但游戏的桥接平台还没就绪：再问一次（dll 就绪时也会主动推 r）
                     var h = Request('H', null, 'h', 1500);
                     if (h != null) Hello(h);
                 }
@@ -160,7 +160,7 @@ namespace ForNet
             ulong id;
             MyId = d.TryGetValue("id", out v) && ulong.TryParse(v, out id) ? id : 0;
             MyName = d.TryGetValue("name", out v) ? v : "";
-            LobbyOk = d.TryGetValue("lobby", out v) && v == "1";     // §124 桥拿到了大厅接口
+            LobbyOk = d.TryGetValue("lobby", out v) && v == "1";     // 桥拿到了大厅接口
             Ready = d.TryGetValue("ready", out v) && v == "1" && MyId != 0;
             Error = Ready ? "" : L.T("游戏里的桥接还没就绪：", "Bridge in the game is not ready: ") + (d.TryGetValue("err", out v) ? v : "");
             if (Ready) Send('R', new[] { (byte)(presenceOk ? 1 : 0) });     // 0.34 告诉桥：能不能写富状态 / 回好友列表
@@ -232,7 +232,7 @@ namespace ForNet
             switch (t)
             {
                 case 'r': Hello(b); return;
-                case 't':     // §125 自检的结论（详细过程桥自己写进 steam_conn.log）
+                case 't':     // 自检的结论（详细过程桥自己写进 steam_conn.log）
                     SelfTestResult = Encoding.UTF8.GetString(b);
                     Diag("自检完成：" + SelfTestResult);
                     return;
@@ -318,7 +318,7 @@ namespace ForNet
 
         public static void Unlisten() { lastHosting = null; Send('U', null); }
 
-        // §125 单机自检：桥另开监听口 27099、连目标（0 = 自己），看连接回调是游戏线程送来的、桥线程派发的还是只能轮询看出来；
+        // 单机自检：桥另开监听口 27099、连目标（0 = 自己），看连接回调是游戏线程送来的、桥线程派发的还是只能轮询看出来；
         // 约 12 秒，过程和结论写进 net\steam_conn.log，结论另外回到 SelfTestResult。有联机会话时桥不跑
         public static volatile string SelfTestResult;
         public static bool SelfTest(ulong target)
@@ -352,7 +352,7 @@ namespace ForNet
             Send('S', Cat(BitConverter.GetBytes(h), BitConverter.GetBytes(flags), data));
         }
 
-        // §296 验收：多人房主每 0.5 秒带人数 / 状态调一次，只有内容变了才真的发给桥（富状态别刷屏）
+        // 验收：多人房主每 0.5 秒带人数 / 状态调一次，只有内容变了才真的发给桥（富状态别刷屏）
         static string lastHosting;
         public static void SetHosting(bool on, string tag = null)
         {
@@ -375,7 +375,7 @@ namespace ForNet
             return name;
         }
 
-        // 正在玩同一个游戏的好友：{SteamID64, 名字, 是否在开房, 房间标签}。开房的排前面
+        // 正在玩同一个游戏的好友：{平台账号 ID, 名字, 是否在开房, 房间标签}。开房的排前面
         public static List<string[]> FriendsInGame()
         {
             if (!Ready || !presenceOk) return new List<string[]>();     // 0.34 没开"显示 " + Bridge.Svc + " 好友"就不读好友列表
@@ -396,7 +396,7 @@ namespace ForNet
             return list;
         }
 
-        // --steam-selftest [SteamID64]：命令行跑自检，等结论（最多 20 秒）
+        // --steam-selftest [平台账号 ID]：命令行跑自检，等结论（最多 20 秒）
         public static int SelfTestCli(ulong target, Action<string> log)
         {
             if (!SelfTest(target)) { log("失败：" + Error); return 1; }
@@ -446,33 +446,33 @@ namespace ForNet
         Wire wire = new Wire(null);
         public Wire Wire { get { return wire; } set { wire = value ?? new Wire(null); } }
         public RemoteOut Out { get { return outq; } }
-        // §135 武林盟主：主机只接受大厅服务器介绍的那个 SteamID（null = 谁先连进来接谁，Steam 好友 / 大厅照旧）
+        // 排位：主机只接受大厅服务器介绍的那个平台账号 ID（null = 谁先连进来接谁，平台好友 / 大厅照旧）
         public Func<ulong, bool> AllowPeer;
-        // §135 每轮收到的最新一个状态包（BridgeRoomLink 从里面取 rk= / mt= / quit=）
+        // 每轮收到的最新一个状态包（BridgeRoomLink 从里面取 rk= / mt= / quit=）
         public Action<string> OnPacket;
         // 直连慢时自动试桥接：每收到一个包（含控制包）/ 每收到一个状态包；NoReconnect = 主机通知停用桥接时客机不自己重连
         public Action<string> OnAny, OnState;
         public bool NoReconnect;
         public void SendCtl(byte[] b) { var c = conn; if (c != 0) Bridge.SendTo(c, b, 1); }
         public bool Linked { get { return conn != 0; } }
-        public ulong PeerBridgeId { get { return conn != 0 ? peerId : 0; } }     // §174 Steam 验过的对方
-        // §174 黑名单里的人连进来：先接住（才能回 4NDENY 让对方面板显示"被房主拒绝"），3 秒后关掉
+        public ulong PeerBridgeId { get { return conn != 0 ? peerId : 0; } }     // 桥接平台验过的对方
+        // 黑名单里的人连进来：先接住（才能回 4NDENY 让对方面板显示"被房主拒绝"），3 秒后关掉
         readonly Dictionary<uint, DateTime> denied = new Dictionary<uint, DateTime>();
 
-        // §141 观战（Steam 好友 / Steam 大厅）。主机：已经有对手时新来的连接先接住（最多 MaxSpec 个），
+        // 观战（平台好友 / 平台大厅）。主机：已经有对手时新来的连接先接住（最多 MaxSpec 个），
         // SpecWait 秒内收到带 spec=1 的握手才算观战者，否则关掉（旧版客机照旧当"房间已满"被拒）；观战者 6 秒没保活也关。
         // 观战者（SpecMode）：主机转来的两路包（src=h / src=c）按来源分别去重
         public const int MaxSpec = 4;
         public const double SpecWait = 5.0, SpecLost = 6.0;
         readonly Dictionary<uint, DateTime> pend = new Dictionary<uint, DateTime>();
         readonly Dictionary<uint, ulong> pendWho = new Dictionary<uint, ulong>();
-        // §314（移植 0.33 线 §269.23）：等着说明来意的连接发来的包验签没过（联机密码对不上 / 时钟差太多）→ 拒绝时说清原因，不再一律写"房间已满"
+        // （移植 0.33 线）：等着说明来意的连接发来的包验签没过（联机密码对不上 / 时钟差太多）→ 拒绝时说清原因，不再一律写"房间已满"
         readonly Dictionary<uint, string> pendBad = new Dictionary<uint, string>();
         public Action<string> OnPeerState { get; set; }
         public Action<string> OnRole { get; set; }
         public Action<string, bool> OnRoleEx { get; set; }
         public Action<PeerRow, string> OnDeliverPeerEvent { get; set; }
-        // ---- M3 多人混战全互连（Steam）
+        // ---- M3 多人混战全互连（桥接平台）
         MpMesh mesh;
         public MpMesh Mesh { get { return mesh; } }
         public bool MpJoinMode { get { return mpJoin; } }
@@ -623,7 +623,7 @@ namespace ForNet
                 + "\nmpfwd=" + mesh.MpFwd + "\nmpdup=" + mesh.MpDup + "\nmpdz=" + mesh.DzStat + "\nmpprobe=" + mesh.ProbeStats()
                 + "\nmphost=" + mesh.HostPid : "";
         }
-        // 房主：进来一条 Steam 连接，按多人玩家收下（MpCfg.Max >= 2 时）
+        // 房主：进来一条 桥接连接，按多人玩家收下（MpCfg.Max >= 2 时）
         bool NoteMp(uint h, string s, ulong who)
         {
             if (MpCfg.Max < 2) return false;
@@ -646,19 +646,19 @@ namespace ForNet
                 return true;
             }
             int existingPid = mesh != null ? mesh.PidByHandle(h) : 0;
-            if (hello && mesh != null && mesh.IsHost && !Link.HelloWatch(s)) mesh.TryYieldAiForHuman(MpCfg.Max);     // §326 观战加入不挤 AI
+            if (hello && mesh != null && mesh.IsHost && !Link.HelloWatch(s)) mesh.TryYieldAiForHuman(MpCfg.Max);     // 观战加入不挤 AI
             var extraUsed = mesh != null ? mesh.Pids() : null;
-            if (extraUsed != null && mesh.MyPid > 0) extraUsed.Add(mesh.MyPid);     // §305 不再写死占住 1 号：换房主后走掉的 1 号可以补给新人（mesh.Pids() 里还在的成员照样占着）
-            int r = peers.NoteMp(h, hello, MpCfg.Max, MpCfg.Cap, MpCfg.Lost, out p, extraUsed, existingPid);     // §311 和局域网一样用 Cap：对决模式人数上限放宽到 18（原来写死 6，桥接对决房 6 人后默默排队）
+            if (extraUsed != null && mesh.MyPid > 0) extraUsed.Add(mesh.MyPid);     // 不再写死占住 1 号：换房主后走掉的 1 号可以补给新人（mesh.Pids 里还在的成员照样占着）
+            int r = peers.NoteMp(h, hello, MpCfg.Max, MpCfg.Cap, MpCfg.Lost, out p, extraUsed, existingPid);     // 和局域网一样用 Cap：对决模式人数上限放宽到 18（原来写死 6，桥接对决房 6 人后默默排队）
             if (r == 0)
             {
-                if (mesh != null && !Link.IsSpecHello(s)) mesh.TellOldClient(h, s);     // §321 旧版 1v1 握手：回版本号，让它显示"版本不一致，建议更新"
+                if (mesh != null && !Link.IsSpecHello(s)) mesh.TellOldClient(h, s);     // 旧版 1v1 握手：回版本号，让它显示"版本不一致，建议更新"
                 return false;
             }
-            if (r < 0) { mpRefused++; if (hello && mesh != null) mesh.DuelRefuseFull(h); return true; }     // §311 对决模式满了明说；普通多人房满了不回绝：连接留着，有人走了就补上（和局域网一样，§298.2 撤回 §296.1 的回绝）
+            if (r < 0) { mpRefused++; if (hello && mesh != null) mesh.DuelRefuseFull(h); return true; }     // 对决模式满了明说；普通多人房满了不回绝：连接留着，有人走了就补上（和局域网一样， 撤回 的回绝）
             if (mesh != null)
             {
-                mesh.AddPlayer(p.Pid, h, "bridge:" + who, who, p.Nick, "", Link.HelloHide(s));     // §294 开了隐藏的人不把 SteamID 介绍给别人
+                mesh.AddPlayer(p.Pid, h, "bridge:" + who, who, p.Nick, "", Link.HelloHide(s));     // 开了隐藏的人不把平台账号 ID介绍给别人
                 if (r == 2)
                 {
                     log(L.T("多人：玩家加入，编号 ", "Multi: player joined, id ") + p.Pid + " " + Bridge.FriendName(who));
@@ -706,7 +706,7 @@ namespace ForNet
         double directLoss, viaLoss;
         int directMaxLoss, viaMaxLoss;
         int directLossStreak;
-        // ---- §141.8 主机下场：第二位选手（连接句柄 conn2）
+        // ---- 主机下场：第二位选手（连接句柄 conn2）
         public Action<string> OnSecondState { get; set; }
         public bool NoOut { get; set; }
         public bool HasSecond { get { return peers.HasSecond; } }
@@ -720,7 +720,7 @@ namespace ForNet
             var w = r.BridgeId;
             log(L.T("第二位选手上场：", "Second player: ") + Bridge.FriendName(w));
             Bridge.Diag("主机下场：第二位选手 " + w + " 连接 " + head);
-            // M2：4NMESH 介绍直连只在解说模式（HostSpecCfg.On）下发；普通"主机下场"保持 M1 的纯中转，客机不会进网状直连
+            // M2：4N 介绍直连只在解说模式（HostSpecCfg.On）下发；普通"主机下场"保持 M1 的纯中转，客机不会进网状直连
             if (HostSpecCfg.On && conn != 0 && peerId != 0 && head != 0 && w != 0)
             {
                 string token = Guid.NewGuid().ToString("N").Substring(0, 8);
@@ -749,7 +749,7 @@ namespace ForNet
         public bool SpecMode { get { return specMode; } set { specMode = value; peers.ClearSrcSeq(); } }
         public long SpecTx, SrcH, SrcC;
         public int SpecCount { get { return peers.SpecCount; } }
-        // §223.4 观战者会不会拼省流包（握手带 dzv=1）
+        // 观战者会不会拼省流包（握手带 dzv=1）
         public bool SpecDzAll { get { return peers.SpecDzAll; } }
         public void SendSpecs(byte[] b)
         {
@@ -757,7 +757,7 @@ namespace ForNet
             foreach (var h in to) { SpecTx++; Bridge.SendTo(h, b, 1); }
         }
 
-        // ---- §141.7 排队（主机）
+        // ---- 排队（主机）
         public List<object> QueueOrder() { return peers.QueueOrderObj(); }
         public bool HasPeer { get { return peers.HasPeer; } }
         public bool CanPromote { get { return peers.CanPromote; } }
@@ -788,7 +788,7 @@ namespace ForNet
             return old;
         }
 
-        // §314 验签没过的原因（站在主机这边说）
+        // 验签没过的原因（站在主机这边说）
         static string RefuseText(string why, bool en)
         {
             switch (why)
@@ -814,14 +814,14 @@ namespace ForNet
                     if ((now - kv.Value).TotalSeconds > SpecWait) { ulong w; pendWho.TryGetValue(kv.Key, out w); refuse.Add(new KeyValuePair<uint, ulong>(kv.Key, w)); }
                 peers.PruneSpecs(SpecLost, drop);
                 foreach (var r in refuse) { string bw; if (pendBad.TryGetValue(r.Key, out bw)) refuseWhy[r.Key] = bw; pend.Remove(r.Key); pendWho.Remove(r.Key); pendBad.Remove(r.Key); }
-                foreach (var kv in denied) if ((now - kv.Value).TotalSeconds > 3) gone.Add(kv.Key);     // §174
+                foreach (var kv in denied) if ((now - kv.Value).TotalSeconds > 3) gone.Add(kv.Key);
                 foreach (var h in gone) denied.Remove(h);
             }
             foreach (var h in gone) Bridge.Close(h, true);
             foreach (var r in refuse)
             {
                 // 满了、又没说是来观战的（旧版客机 / 想当对手的）：照旧按"房间已满"拒绝
-                // §314 包验签没过的（联机密码对不上等）按真实原因写；对手位空着却没来包的不算"满"
+                // 包验签没过的（联机密码对不上等）按真实原因写；对手位空着却没来包的不算"满"
                 Bridge.Close(r.Key, false);
                 string why;
                 refuseWhy.TryGetValue(r.Key, out why);
@@ -903,7 +903,7 @@ namespace ForNet
                 lastDirectRetry = DateTime.UtcNow;
                 return;
             }
-            // M3/M4：多人房里两个玩家之间的 Steam 直连断了：清掉句柄，后台按编号重连（断了就退回经房主 / 第三人中转）
+            // M3/M4：多人房里两个玩家之间的桥接平台直连断了：清掉句柄，后台按编号重连（断了就退回经房主 / 第三人中转）
             if (!host && mesh != null && h != conn && mesh.HasHandle(h)
                 && (st == Bridge.StClosedByPeer || st == Bridge.StProblem || st == Bridge.StNone || st == -1))
             {
@@ -926,7 +926,7 @@ namespace ForNet
                 // M3 多人房间：来的是玩家，先接住，等握手包分配编号或判定拒绝
                 if (MpCfg.Max >= 2)
                 {
-                    // §296 验收：先接住才能回"对局中 / 观众满"的原因，但没握手的连接也得有上限（原来满了直接关）
+                    // 验收：先接住才能回"对局中 / 观众满"的原因，但没握手的连接也得有上限（原来满了直接关）
                     int pending; lock (peers.SyncRoot) pending = mpWho.Count;
                     if (pending >= MpCfg.Max - 1 + 4)
                     {
@@ -944,7 +944,7 @@ namespace ForNet
                 }
                 int busy;
                 lock (peers.SyncRoot) busy = pend.Count + peers.SpecCount;
-                // §141 先接住，看它发来的第一个包：带 spec=1 的握手 = 观战者；别的包 = 想当对手（对手位空着就给它，满了按"房间已满"拒绝）。
+                // 先接住，看它发来的第一个包：带 spec=1 的握手 = 观战者；别的包 = 想当对手（对手位空着就给它，满了按"房间已满"拒绝）。
                 // 以前对手位空着时直接接成对手：观战者连空房间会被当成对手
                 if (AllowPeer == null && busy < SpecCfg.Max + 1 && Bridge.Accept(h))
                 {
@@ -964,7 +964,7 @@ namespace ForNet
                 {
                     Bridge.Close(h, false);
                     Bridge.Diag("主机：拒绝 " + who + "（不是大厅服务器介绍的对手）");
-                    log(L.T("拒绝 ", "Refused ") + Bridge.FriendName(who) + L.T("：不是从武林盟主房间加入的", ": did not join through the ranked room"));
+                    log(L.T("拒绝 ", "Refused ") + Bridge.FriendName(who) + L.T("：不是从" + GameInfo.RankedZh + "房间加入的", ": did not join through the ranked room"));
                     return;
                 }
                 bool ok = Bridge.Accept(h);
@@ -1033,7 +1033,7 @@ namespace ForNet
             var c = conn;
             if (c == 0) return;
             tx++;
-            // k_nSteamNetworkingSend_UnreliableNoNagle = 1：状态包丢了就丢了，下一包会覆盖
+            // 发送标志 1（不可靠、不攒包）：状态包丢了就丢了，下一包会覆盖
             Bridge.SendTo(c, b, 1);
         }
 
@@ -1048,7 +1048,7 @@ namespace ForNet
                 lock (Bridge.Data) { if (Bridge.Data.Count == 0) break; m = Bridge.Data.Dequeue(); }
                 if (host && conn2 != 0 && m.Key == conn2)
                 {
-                    // §141.8 第二位选手的包：状态包交给 Session 转发；握手 / 可靠事件不进主机的可靠通道
+                    // 第二位选手的包：状态包交给 Session 转发；握手 / 可靠事件不进主机的可靠通道
                     peers.LastFromSecond = DateTime.UtcNow;
                     var s2 = wire.Verify(m.Value, 0, m.Value.Length, b => Bridge.SendTo(m.Key, b, 1));
                     if (s2 == null) continue;
@@ -1127,8 +1127,8 @@ namespace ForNet
                 {
                     bool deny;
                     lock (peers.SyncRoot) deny = denied.ContainsKey(m.Key);
-                    if (deny) { var dk = m.Key; wire.Deny(b => Bridge.SendTo(dk, b, 8)); continue; }     // §174 可靠发送
-                    // §141 观战者 / 等着说明来意的连接：只认 spec=1 握手（保活），别的都不要
+                    if (deny) { var dk = m.Key; wire.Deny(b => Bridge.SendTo(dk, b, 8)); continue; }     // 可靠发送
+                    // 观战者 / 等着说明来意的连接：只认 spec=1 握手（保活），别的都不要
                     bool known;
                     bool inMesh = mesh != null && mesh.HasHandle(m.Key);
                     bool knownMp = inMesh || (MpCfg.Max >= 2 && mpWho.ContainsKey(m.Key));
@@ -1138,7 +1138,7 @@ namespace ForNet
                     var hs = wire.Verify(m.Value, 0, m.Value.Length, b => Bridge.SendTo(m.Key, b, 1));
                     if (hs == null)
                     {
-                        // §314 记下为什么拒收（对方那边会收到 4NNAK、面板自己显示"联机密码不一样"）；5 秒后拒绝时按这个原因写日志
+                        // 记下为什么拒收（对方那边会收到 4NNAK、面板自己显示"联机密码不一样"）；5 秒后拒绝时按这个原因写日志
                         string why = wire.RejBad != rb0 ? "bad" : wire.RejSigned != rs0 ? "signed" : wire.RejUnsigned != ru0 ? "unsigned" : wire.RejTime != rt0 ? "time" : null;
                         if (why != null)
                         {
@@ -1261,7 +1261,7 @@ namespace ForNet
                 if (host) peers.LastFromPeer = DateTime.UtcNow;
                 var oa = OnAny;
                 if (oa != null) oa(s);
-                if (host && Link.IsSpecHello(s))      // §141.7 对手自己下去观战（刚叫上场、还没收到 4NROLE 的不算）
+                if (host && Link.IsSpecHello(s))      // 对手自己下去观战（刚叫上场、还没收到 4NROLE 的不算）
                 {
                     if ((DateTime.UtcNow - promotedAt).TotalSeconds > Link.PromoteGrace) DemotePeer();
                     continue;
@@ -1314,7 +1314,7 @@ namespace ForNet
                         Bridge.SendTo(m.Key, Wire.Seal(WireTag.P + "PONG\nt=" + tval + "\n"), 1);
                     continue;
                 }
-                if (!host && s.StartsWith(WireTag.P + "ROLE", StringComparison.Ordinal))      // §141.7 主机让换角色
+                if (!host && s.StartsWith(WireTag.P + "ROLE", StringComparison.Ordinal))      // 主机让换角色
                 {
                     var q = Kv.Parse(s);
                     string rv, mh;
@@ -1343,7 +1343,7 @@ namespace ForNet
                     if (mesh != null) mesh.PruneRoster(MpRoster);
                     continue;
                 }
-                if (!host && s.StartsWith(WireTag.P + "Q", StringComparison.Ordinal))         // §141.7 排第几
+                if (!host && s.StartsWith(WireTag.P + "Q", StringComparison.Ordinal))         // 排第几
                 {
                     var q = Kv.Parse(s);
                     string a, b2;
@@ -1372,7 +1372,7 @@ namespace ForNet
                 }
                 got++;
                 newest = s;
-                if (!specMode) wire.DzSeenText(s);      // §223.6 认定是对手的状态包了：算对方会不会拼省流包
+                if (!specMode) wire.DzSeenText(s);      // 认定是对手的状态包了：算对方会不会拼省流包
                 if (!NoOut && (!meshDirectConnected || host)) outq.Push(s);
                 var fw = OnPeerState;
                 if (fw != null && host) fw(s);
@@ -1428,7 +1428,7 @@ namespace ForNet
                     peers.PeerRow.Route = meshDirectConnected ? PeerRoute.Direct : PeerRoute.Via;
                 }
             }
-            outq.Flush();   // 每轮写一个（RemoteOut，HANDOVER §72.10）
+            outq.Flush();   // 每轮写一个（RemoteOut）
             if (host) SpecTick();
             if (newest != null && !specMode)
             {
@@ -1457,7 +1457,7 @@ namespace ForNet
 
         public void Close()
         {
-            if (mesh != null && mesh.MyPid > 0)     // §297 成员也告别（只告诉房主）
+            if (mesh != null && mesh.MyPid > 0)     // 成员也告别（只告诉房主）
             {
                 mesh.BroadcastBye();
                 try { Thread.Sleep(30); } catch (Exception) { }

@@ -1,20 +1,20 @@
-// v0.22.0：可靠事件通道 + 可选的包签名（HANDOVER §51）。
+// v0.22.0：可靠事件通道 + 可选的包签名。
 //
 // 两条通道：
-//   状态包（位置 / 动作 / 血量 / 准备 / 装备 …）：照旧"最新覆盖"，丢了就丢了，下一包会盖过去
-//   可靠事件（弃权、回合结果、对局结果 …）：按序号确认、超时重发、接收端去重并按顺序交付
-// 两条都走同一个传输（直连 UDP / Steam / 服务器大厅直连或中转），所以所有连接方式都能用。
+// 状态包（位置 / 动作 / 血量 / 准备 / 装备 …）：照旧"最新覆盖"，丢了就丢了，下一包会盖过去
+// 可靠事件（弃权、回合结果、对局结果 …）：按序号确认、超时重发、接收端去重并按顺序交付
+// 两条都走同一个传输（直连 UDP / 桥接平台 / 服务器大厅直连或中转），所以所有连接方式都能用。
 //
 // Lua ↔ 本程序（游戏没有 socket，只能读写文件）：
-//   net\rel_out.txt  Lua 写：b=<Lua 启动号> gb=<它读到的 rel_in 的 b> got=<已处理到的交付号> e<本地号>=<事件> … end=1
-//   net\rel_in.txt   本程序写：b=<本次联机的启动号> ob=<took 对应的 Lua 启动号> took=<已收下的本地号> d<交付号>=<事件> … end=1
-//   双方各自在自己的文件里确认对方的文件（took / got），对方据此删掉已经处理的行；没有 end=1 的半截文件不读。
+// net\rel_out.txt Lua 写：b=<Lua 启动号> gb=<它读到的 rel_in 的 b> got=<已处理到的交付号> e<本地号>=<事件> … end=1
+// net\rel_in.txt 本程序写：b=<本次联机的启动号> ob=<took 对应的 Lua 启动号> took=<已收下的本地号> d<交付号>=<事件> … end=1
+// 双方各自在自己的文件里确认对方的文件（took / got），对方据此删掉已经处理的行；没有 end=1 的半截文件不读。
 //
-// 包格式（联机程序 ↔ 联机程序，详见 HANDOVER §51.3）：
-//   事件  4NEV\nsid=<发送方流号>\nbase=<最小未确认号>\ne<号>=<事件>\n…
-//   确认  4NACK\nsid=<对方的流号>\nupto=<连续收到的最大号>\n
-//   签名  4NSIG|<协议版本>|<unix 毫秒>|<HMAC-SHA256 十六进制>\n<原来的包>   （设了密码才有；HMAC 覆盖 "<毫秒>\n<原来的包>"）
-//   拒收通知 4NNAK|<原因>|<协议版本>|<程序版本>   不签名，只用来给对方显示提示（每种原因每秒最多 1 个）
+// 包格式（联机程序 ↔ 联机程序，详见）：
+// 事件 4NEV\nsid=<发送方流号>\nbase=<最小未确认号>\ne<号>=<事件>\n…
+// 确认 4NACK\nsid=<对方的流号>\nupto=<连续收到的最大号>\n
+// 签名 4NSIG|<协议版本>|<unix 毫秒>|<HMAC-SHA256 十六进制>\n<原来的包> （设了密码才有；HMAC 覆盖 "<毫秒>\n<原来的包>"）
+// 拒收通知 4NNAK|<原因>|<协议版本>|<程序版本> 不签名，只用来给对方显示提示（每种原因每秒最多 1 个）
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -42,9 +42,9 @@ namespace ForNet
         public long RejBad, RejTime, RejUnsigned, RejSigned;
         public volatile string PeerApp;             // 对方程序版本（状态包 / 握手 / 拒收通知里带的）
         public volatile int PeerProto;              // 0 = 还不知道；1 = 旧版（状态包没有 pv=）
-        long lastHelloTicks;                        // §85.5 最近一次收到对方会话握手（4NHELLO 带 pv=）的时间（UTC Ticks）
-        public volatile string HelloNick;           // §85.5 对方握手里的昵称（nm=，旧版没有）
-        // §174 拉黑：主机设 Gate（Blacklist.DeniesBody），黑名单里的人发来的包丢掉、回一个签过名的 4NDENY；
+        long lastHelloTicks;                        // 最近一次收到对方会话握手（4NHELLO 带 pv=）的时间（UTC Ticks）
+        public volatile string HelloNick;           // 对方握手里的昵称（nm=，旧版没有）
+        // 拉黑：主机设 Gate（Blacklist.DeniesBody），黑名单里的人发来的包丢掉、回一个签过名的 4NDENY；
         // 被拒的一方收到后记下时间（Denied：面板显示"被房主拒绝"，主程序断开）。PeerUid / PeerSh = 对方握手 / 状态包里的标识
         public Func<string, bool> Gate;
         public long DeniedOut;
@@ -113,16 +113,16 @@ namespace ForNet
         // 收到的包：验签，返回原来的包；拒收 / 拒收通知返回 null。reply 用来回拒收通知（可以为 null）
         public string Verify(byte[] d, int off, int len, Action<byte[]> reply)
         {
-            // §223.4 先把对战省流包拼回完整包（Transport.cs DzIn），再过拉黑检查：省流包不带 uid= 这类不变的字段，
+            // 先把对战省流包拼回完整包（Transport.cs DzIn），再过拉黑检查：省流包不带 uid= 这类不变的字段，
             // 先检查的话被拉黑的人后面的省流包会漏过去（test_blacklist 抓到的）
-            // "对方会不会拼"不在这里算（这时还不知道是不是对手发来的）：各连接方式认定是对手的状态包后调 DzSeenText（§223.6）
+            // "对方会不会拼"不在这里算（这时还不知道是不是对手发来的）：各连接方式认定是对手的状态包后调 DzSeenText
             var body = Dz.Take(VerifyRaw(d, off, len, reply), null);
             var g = Gate;
             if (body != null && g != null && g(body)) { Deny(reply); return null; }
             return body;
         }
 
-        // §223.4 对战省流：收到的拼回（每个发送方一份），对方会不会拼（dzv=1）、主机的设置（dzh=，-1 = 没说 / 旧版主机）
+        // 对战省流：收到的拼回（每个发送方一份），对方会不会拼（dzv=1）、主机的设置（dzh=，-1 = 没说 / 旧版主机）
         public readonly DzIn Dz = new DzIn();
         public volatile bool PeerDz;
         public volatile int PeerDzHost = -1;
@@ -132,7 +132,7 @@ namespace ForNet
         string peerDzKey;
         // 换了对手（Session.DzOut 看 PeerStr 变了）：先当对方不会拼、主机没说，等新对手的完整包再算；编码从全量重来
         public void DzForget() { PeerDz = false; PeerDzHost = -1; peerDzKey = null; DzReset = true; }
-        // §223.6 认定是对手的状态包（已经拼回完整包，带着 dzv / dzh / dzk）后调：按它算对方会不会拼、主机的设置、对方重启没有。
+        // 认定是对手的状态包（已经拼回完整包，带着 dzv / dzh / dzk）后调：按它算对方会不会拼、主机的设置、对方重启没有。
         // 以前在 Verify 里对每个收到的包都算（审查：不是对手的人发个包就能改 PeerDz / 触发重来）
         public void DzSeenText(string body)
         {
@@ -162,7 +162,7 @@ namespace ForNet
             }
         }
 
-        // §174 拒一个包：回 4NDENY（每 0.5 秒最多一个）
+        // 拒一个包：回 4NDENY（每 0.5 秒最多一个）
         public void Deny(Action<byte[]> reply)
         {
             DeniedOut++;
@@ -242,7 +242,7 @@ namespace ForNet
             if (body.StartsWith(WireTag.P + "MESHHELLO\n", StringComparison.Ordinal)) return true;
             if (body.StartsWith(WireTag.P + "PING\n", StringComparison.Ordinal)) return true;
             if (body.StartsWith(WireTag.P + "PONG\n", StringComparison.Ordinal)) return true;
-            if (body.StartsWith(WireTag.P + "DENY", StringComparison.Ordinal)) { deniedAt = DateTime.UtcNow; return true; }     // §174
+            if (body.StartsWith(WireTag.P + "DENY", StringComparison.Ordinal)) { deniedAt = DateTime.UtcNow; return true; }
             bool hello = body.StartsWith(WireTag.P + "HELLO", StringComparison.Ordinal);
             if (hello && body.IndexOf("\npv=", StringComparison.Ordinal) < 0) return true;   // 打洞 / 旧版的握手：看不出版本
             if (!hello && body.IndexOf("\nseq=", StringComparison.Ordinal) < 0) return false;
@@ -251,7 +251,7 @@ namespace ForNet
             PeerProto = p != null && int.TryParse(p, out pv) ? pv : 1;
             var av = Field(body, "av");
             if (av != null && av.Length > 0) PeerApp = av;
-            var uid = Field(body, "uid");       // §174
+            var uid = Field(body, "uid");
             if (uid != null && uid.Length > 0) PeerUid = uid;
             var sh = Field(body, "sh");
             if (sh != null && sh.Length > 0) PeerSh = sh;
@@ -259,13 +259,13 @@ namespace ForNet
             if (hello)
             {
                 System.Threading.Interlocked.Exchange(ref lastHelloTicks, DateTime.UtcNow.Ticks);
-                var nm = Field(body, "nm");     // §85.5 握手带的昵称（只靠握手转正时提示用）
+                var nm = Field(body, "nm");     // 握手带的昵称（只靠握手转正时提示用）
                 if (nm != null && nm.Length > 0) HelloNick = nm;
             }
             return hello;
         }
 
-        // §85.5 对方多少秒前握过手（没握过 = 很大）。AI 对战时等人的房间不发包，客机在收到主机的包之前只发握手
+        // 对方多少秒前握过手（没握过 = 很大）。AI 对战时等人的房间不发包，客机在收到主机的包之前只发握手
         public double SinceHello
         {
             get
@@ -275,7 +275,7 @@ namespace ForNet
             }
         }
 
-        // §174 最近 10 秒收到过主机的 4NDENY
+        // 最近 10 秒收到过主机的 4NDENY
         public bool Denied { get { return (DateTime.UtcNow - deniedAt).TotalSeconds < 10; } }
 
         // 给窗口看的一句提示（空 = 一切正常）。只看最近 5 秒发生的问题。brief = 游戏内面板用的短句（一行只放得下 30 来个字）
@@ -369,7 +369,7 @@ namespace ForNet
             if (dir != null) Retarget(dir);
         }
 
-        // 换和 Lua 交换的目录（§85 等人的房间转正：net\wait\ → net\）。和对方的流号 / 序号不动；
+        // 换和 Lua 交换的目录（等人的房间转正：net\wait\ → net\）。和对方的流号 / 序号不动；
         // 和构造时一样，Lua 在这之前写的事件（AI 对战时的）不发。只在 Session 的收发线程里调
         public void Retarget(string dir)
         {
@@ -384,7 +384,7 @@ namespace ForNet
 
         static Dictionary<string, string> ReadDone(string path)
         {
-            var t = GamePipe.In(path);      // §84 连着管道：游戏经管道发来的 rel_out；没连读文件
+            var t = GamePipe.In(path);      // 连着管道：游戏经管道发来的 rel_out；没连读文件
             if (t == null) return null;
             var d = Kv.Parse(t);
             return d.ContainsKey("end") ? d : null;     // 没有 end=1 = 对方写到一半，下次再读
@@ -590,7 +590,7 @@ namespace ForNet
             sb.Append("b=").Append(boot).Append("\nob=").Append(luaBoot).Append("\ntook=").Append(took).Append('\n');
             foreach (var e in inbox) sb.Append('d').Append(e.Key).Append('=').Append(e.Value).Append('\n');
             sb.Append("end=1\n");
-            GamePipe.Out(fIn, sb.ToString());       // §84
+            GamePipe.Out(fIn, sb.ToString());
         }
 
         public string StatText()

@@ -1,12 +1,12 @@
-// M3 多人混战全互连（docs/MESH.md §5 / §9 M3）：房主发介绍信，玩家两两直连；
+// M3 多人混战全互连（/ M3）：房主发介绍信，玩家两两直连；
 // 每对每秒测直连 / 经第三人中转的延迟与丢包，按分数选路；丢包高时直连 + 中转双发，接收端按 src + seq 去重。
 // 游戏那边仍然只认带 src=<编号> 的包，game_multi.lua 不变。
 //
 // 协议（都走原来的签名 Wire，旧版联机程序不认识 4NMP* 会当控制包忽略）：
-//   4NMPMESH   房主 → 玩家：peer=<编号> addr=<ip:端口> sid=<SteamID> token=<口令>   介绍一个对端
-//   4NMPHELLO  玩家 → 玩家：pid=<我的编号> token=<口令>                             直连握手
-//   4NMPPING / 4NMPPONG  直连延迟探测
-//   4NMPRELAY  经第三人中转：头部 from/to/kind/ttl/relay + "--" + 原包
+// 4NMP 房主 → 玩家：peer=<编号> addr=<ip:端口> sid=<平台账号 ID> token=<口令> 介绍一个对端
+// 4NMPHELLO 玩家 → 玩家：pid=<我的编号> token=<口令> 直连握手
+// 4NMPPING / 4NMPPONG 直连延迟探测
+// 4NMPRELAY 经第三人中转：头部 from/to/kind/ttl/relay + "--" + 原包
 // kind=state 状态包（按 src+seq 去重）；kind=rel 可靠事件；kind=vp / pr 经中转测延迟。
 // 旧版（没有 M3 的联机程序）在多人房里仍然走原来的星形转发；新版房主收到没有 mp=1 的握手照旧走 1v1。
 using System;
@@ -36,9 +36,9 @@ namespace ForNet
     {
         public int Pid;
         public object Handle;            // 控制连接 / 直连 IP 端点（房主看玩家、玩家看房主）
-        public object DirectHandle;      // Steam 另开的直连句柄（LAN 为 null，直接用 Handle）
-        public object AltHandle;         // §280 对方从另一个地址族（IPv4 / IPv6）发来的握手地址：也认它的包，但发还是发给 Handle
-        // §323 另一个地址族那条线（多半是 IPv6）：房主介绍时带 v6=（对方自己报的），两边同时测，明显更快 / 当前那条断了就换过去（Handle ↔ AltHandle 对调）
+        public object DirectHandle;      // 桥接平台另开的直连句柄（LAN 为 null，直接用 Handle）
+        public object AltHandle;         // 对方从另一个地址族（IPv4 / IPv6）发来的握手地址：也认它的包，但发还是发给 Handle
+        // 另一个地址族那条线（多半是 IPv6）：房主介绍时带 v6=（对方自己报的），两边同时测，明显更快 / 当前那条断了就换过去（Handle ↔ AltHandle 对调）
         public string V6Addr = "";       // 对方自己报的公网 IPv6 端点（"[v6]:端口"；房主记着给别人介绍）
         public bool AltVerified;         // 另一族收到过对方带口令的握手 / 回了 PONG
         public double AltRtt = -1;
@@ -52,10 +52,10 @@ namespace ForNet
         public string Nick = "";
         public string Token = "";        // 房主介绍时给这一对的一次性口令
         public bool DirectVerified;      // 收到对方带正确口令的 4NMPHELLO
-        public volatile bool MdzOk;      // §328 对方会拼全互连省流包（它的状态包 / 握手 / 探测里带 mdz=1）
-        public volatile bool MdaOk;      // §328.3 对方还会拼房主代发的 AI 省流包（带 mda=1；只有 §328 没有 §328.3 的版本不会）
-        public volatile bool HostMdz;    // §328.2 房主在名单里担保它会拼（对决观众只经房主、不发状态包时只能靠这个）
-        public bool Hidden;              // §294 对方开了"隐藏我的 IP"：房主不把它的地址介绍给别人，和它之间只经房主转发
+        public volatile bool MdzOk;      // 对方会拼全互连省流包（它的状态包 / 握手 / 探测里带 mdz=1）
+        public volatile bool MdaOk;      // 对方还会拼房主代发的 AI 省流包（带 mda=1；只有 没有 的版本不会）
+        public volatile bool HostMdz;    // 房主在名单里担保它会拼（对决观众只经房主、不发状态包时只能靠这个）
+        public bool Hidden;              // 对方开了"隐藏我的 IP"：房主不把它的地址介绍给别人，和它之间只经房主转发
         public bool IsAi;                // 本机房主托管的多人 AI（不发握手/ping，不超时）
         public DateTime LastHelloAt, LastDirectRx, LastViaRx, LastStateAt, LastPingAt, LastEnsureAt;
         public DateTime LastAnyRx
@@ -82,7 +82,7 @@ namespace ForNet
         public int DirectRxCount, ViaRxCount;
         public long StateTx, FwdTx;      // 对决统计：我发给它的自己的状态包 / 我（当转发机）转给它的选手包
         public string RouteWhy = "";
-        public DateTime ByeAt = DateTime.MinValue;     // §297 成员正常退出时发来的告别（只有房主记；之后 1 秒以上又有包 = 回来了，作废）
+        public DateTime ByeAt = DateTime.MinValue;     // 成员正常退出时发来的告别（只有房主记；之后 1 秒以上又有包 = 回来了，作废）
         public double PeerHostAge = -1;                // 成员报给我的它最后收到房主包的间隔（秒）
         public DateTime PeerHostAgeAt = DateTime.MinValue;
         public uint BuHandle;                          // 按需升级的桥接连接句柄（0 = 未建）
@@ -246,10 +246,10 @@ namespace ForNet
         DateTime lastMpBroadcast = DateTime.MinValue;
         readonly DateTime bornAt = DateTime.UtcNow;
         public ulong SelfSid = 0UL;
-        // §294 隐藏我的 IP：netcfg hideip=1。开了以后房主介绍我时不带地址（addr / lan / sid），我也不主动直连房主以外的人；
+        // 隐藏我的 IP：netcfg hideip=1。开了以后房主介绍我时不带地址（addr / lan / sid），我也不主动直连房主以外的人；
         // 我和别人之间的包都经房主转发。只有房主（和换房主后的新房主）知道我的 IP。我当房主时不起作用（大家本来就要连房主）。
         public static volatile bool HideIpPref;
-        // §323 本机公网 IPv6 端点（握手里报 v6=，房主介绍自己时带上）；没有公网 IPv6 / 关了 IPv6 / 开了隐藏 IP = ""。只问路由不发包，缓存 30 秒
+        // 本机公网 IPv6 端点（握手里报 v6=，房主介绍自己时带上）；没有公网 IPv6 / 关了 IPv6 / 开了隐藏 IP = ""。只问路由不发包，缓存 30 秒
         static IPAddress v6Cache;
         static DateTime v6CacheAt = DateTime.MinValue;
         public static string V6Ep(int port)
@@ -308,10 +308,10 @@ namespace ForNet
         public string SelfName = "";
         public Func<string, byte[]> Seal;
         public Action<object, byte[]> SendRaw;
-        public Func<int, string, ulong, object> EnsureHandle;   // Steam：按 sid 连/等；LAN：解析 addr
+        public Func<int, string, ulong, object> EnsureHandle;   // 桥接平台：按 sid 连/等；LAN：解析 addr
         public Action<string> Deliver;           // 状态包交给本机游戏（已带 src）
         public Action<string> DeliverRel;        // 可靠事件交给本机游戏
-        public Func<int, string, bool> ServerRelay;   // §240 服务器房：直连不通时经服务器中转（返回是否已发）
+        public Func<int, string, bool> ServerRelay;   // 服务器房：直连不通时经服务器中转（返回是否已发）
         public Action<int, string> OnHumanStateForAi; // 房主：收到人类玩家状态包，转喂本机 AI
         public Action<int> OnPeerLeftForAi;           // 房主：玩家离开/超时，清理 AI 里的旧玩家状态
         public Action<int> OnYieldAiForHuman;         // 房主：满员新人加入时让出最高编号 AI（参数 = 被踢的 AI 编号）
@@ -373,8 +373,8 @@ namespace ForNet
                 if (peers.TryGetValue(pid, out p) && p.IsAi) peers.Remove(pid);
             }
         }
-        // §326.4 房间列表 / 好友页报的人数：对局外 AI 会被真人挤掉，不算人数（另带 ;ai=<个数> 给面板显示）；
-        // 对局中不挤 AI（§326.1），照旧算进去。不是房主 / 没有 AI = 原样。以前 房主 + 3 AI 报 4/4，列表标 [已满]、真人点不进
+        // 房间列表 / 好友页报的人数：对局外 AI 会被真人挤掉，不算人数（另带 ;ai=<个数> 给面板显示）；
+        // 对局中不挤 AI，照旧算进去。不是房主 / 没有 AI = 原样。以前 房主 + 3 AI 报 4/4，列表标 [已满]、真人点不进
         public static int Listed(MpMesh m, int total)
         {
             if (m == null || !m.IsHost) return total;
@@ -398,8 +398,8 @@ namespace ForNet
             lock (sync)
             {
                 if (!IsHost || aiPids.Count == 0) return false;
-                // §326 复测 2：对局进行中不挤 AI。挤了以后新人拿到 AI 的编号，房主那局的参加名单 / 击杀统计都按编号记，
-                // 新人会直接顶着 AI 的参赛位和战绩上场（没按 §322 先观战）；满员就和普通满员房一样进不来，这局打完再进
+                // 复测 2：对局进行中不挤 AI。挤了以后新人拿到 AI 的编号，房主那局的参加名单 / 击杀统计都按编号记，
+                // 新人会直接顶着 AI 的参赛位和战绩上场（没按 先观战）；满员就和普通满员房一样进不来，这局打完再进
                 if (hostInMatch) return false;
                 int humanTotal = 1;
                 foreach (var p in peers.Values) if (!p.IsAi && p.Pid != MyPid) humanTotal++;
@@ -433,7 +433,7 @@ namespace ForNet
                 foreach (var id in next) aiPids.Add(id);
             }
         }
-        public bool NeedVerifiedDirect;  // §240 服务器房：Handle 只是"介绍的地址"，收到对方包才算直连通
+        public bool NeedVerifiedDirect;  // 服务器房：Handle 只是"介绍的地址"，收到对方包才算直连通
         public Action<int, string, string> ChatIn; // 房主：收到某位玩家的聊天
         public Func<string, int, bool> Dedupe;   // src + seq 去重（PeerTable.TakeSrcSeq）
         public Action<string> Log = delegate { };
@@ -532,13 +532,13 @@ namespace ForNet
         static bool UsableLan(string s)
         {
             if (string.IsNullOrEmpty(s)) return false;
-            var ep = Addr.ParseEp(s);     // §280 "[v6]:端口" 也认；链路本地 IPv6 要带网卡号，跨机用不上
+            var ep = Addr.ParseEp(s);     // "[v6]:端口" 也认；链路本地 IPv6 要带网卡号，跨机用不上
             if (ep == null) return false;
             var ip = ep.Address;
             return !IPAddress.IsLoopback(ip) && !ip.IsIPv6LinkLocal && !ip.Equals(IPAddress.Any) && !ip.Equals(IPAddress.IPv6Any);
         }
 
-        // 房主：玩家加入 / 玩家地址变了。addr = LAN 的 ip:端口；BridgeId 只在 Steam 用
+        // 房主：玩家加入 / 玩家地址变了。addr = LAN 的 ip:端口；BridgeId 只在桥接平台用
         public void AddPlayer(int pid, object handle, string addr, ulong sid, string nick, string lan = "", bool hidden = false, string v6 = "")
         {
             if (pid <= 0 || pid == MyPid) return;
@@ -549,7 +549,7 @@ namespace ForNet
                 if (handle != null) { p.Handle = handle; p.DirectVerified = true; p.LastDirectRx = DateTime.UtcNow; }     // 房主接住的控制连接本身就是可用的直连边
                 if (!string.IsNullOrEmpty(addr)) p.Addr = addr;
                 if (UsableLan(lan)) p.LanAddr = lan;
-                if (UsableV6(v6)) p.V6Addr = v6;     // §323
+                if (UsableV6(v6)) p.V6Addr = v6;
                 if (sid != 0UL) p.BridgeId = sid;
                 if (!string.IsNullOrEmpty(nick)) p.Nick = nick;
                 if (hidden && !p.Hidden) { p.Hidden = true; Log(L.T("多人网状：", "Mesh: ") + pid + L.T(" 开了隐藏 IP，不介绍它的地址", " hides its IP; its address is not introduced")); }
@@ -568,7 +568,7 @@ namespace ForNet
                 if (!peers.TryGetValue(pid, out p)) { p = new MpPeerState(); p.Pid = pid; peers[pid] = p; }
                 if (!string.IsNullOrEmpty(addr)) p.Addr = addr;
                 if (UsableLan(lan)) p.LanAddr = lan;
-                if (UsableV6(v6)) p.V6Addr = v6;     // §323
+                if (UsableV6(v6)) p.V6Addr = v6;
                 if (sid != 0UL) p.BridgeId = sid;
                 if (!string.IsNullOrEmpty(token)) p.Token = token;
                 if (handle != null) p.Handle = handle;
@@ -578,7 +578,7 @@ namespace ForNet
             }
         }
 
-        // Steam：连接回调里认出了对端，把直连句柄补上（控制连接走 Handle，另开的直连走 DirectHandle）
+        // 桥接平台：连接回调里认出了对端，把直连句柄补上（控制连接走 Handle，另开的直连走 DirectHandle）
         public void SetDirectHandle(int pid, object handle)
         {
             lock (sync)
@@ -599,7 +599,7 @@ namespace ForNet
             return p == null ? 0 : p.Pid;
         }
 
-        // Steam：两个玩家之间的直连句柄断了。清掉这一对的两个句柄，下一次 Tick 让 EnsureHandle 重连
+        // 桥接平台：两个玩家之间的直连句柄断了。清掉这一对的两个句柄，下一次 Tick 让 EnsureHandle 重连
         // （编号小的一侧负责重连；另一侧等它连过来）。控制连接（房主那条）不走这里。
         public void DropDirectHandle(object h)
         {
@@ -644,10 +644,10 @@ namespace ForNet
                 {
                     if (ev.StartsWith("chat ", StringComparison.Ordinal) && ChatIn != null)
                         ChatIn(p.Pid, p.Nick, ev.Substring(5));
-                    // §295 玩家要房主的数值表（cfgreq <哈希>）：交给房主自己的游戏，它发回的 cfg 块由 Program 广播给全房
+                    // 玩家要房主的数值表（cfgreq <哈希>）：交给房主自己的游戏，它发回的 cfg 块由 Program 广播给全房
                     else if (ev.StartsWith("cfgreq", StringComparison.Ordinal) && DeliverRel != null)
                         DeliverRel(ev);
-                    // §295 选手这一场的规则整串（rfpx）：交给房主自己的游戏（房主当选手时对手是它）；对决模式再转给其他人
+                    // 选手这一场的规则整串（rfpx）：交给房主自己的游戏（房主当选手时对手是它）；对决模式再转给其他人
                     // （多人模式只比房主的，不转：不然别人的整串会盖掉房主的）
                     else if (ev.StartsWith("rfpx ", StringComparison.Ordinal))
                     {
@@ -694,15 +694,15 @@ namespace ForNet
                         if (i == j) continue;
                         MpPeerState q = peers[ids[j]];
                         if (q.IsAi) continue;
-                        if (q.Hidden) SendIntroTo(p, q.Pid, "", 0UL, PairToken(p.Pid, q.Pid), "", true);     // §294 不给地址，只给口令（换房主后新房主要认它的握手）
+                        if (q.Hidden) SendIntroTo(p, q.Pid, "", 0UL, PairToken(p.Pid, q.Pid), "", true);     // 不给地址，只给口令（换房主后新房主要认它的握手）
                         else SendIntroTo(p, q.Pid, q.Addr, q.BridgeId, PairToken(p.Pid, q.Pid), q.LanAddr, false, q.V6Addr);
                     }
                 }
             }
         }
 
-        public string HostAddr = "";      // LAN：房主的 ip:端口；Steam 空
-        // §280 按玩家算房主地址（IPv6 玩家要拿到房主的 IPv6 地址，IPv4 玩家拿 IPv4 的）；没设 / 算不出退回 HostAddr
+        public string HostAddr = "";      // LAN：房主的 ip:端口；桥接平台空
+        // 按玩家算房主地址（IPv6 玩家要拿到房主的 IPv6 地址，IPv4 玩家拿 IPv4 的）；没设 / 算不出退回 HostAddr
         public Func<object, string> HostAddrOf;
         string HostAddrFor(MpPeerState p)
         {
@@ -719,7 +719,7 @@ namespace ForNet
             sb.Append(WireTag.P + "MPMESH\npeer=").Append(peerPid).Append('\n');
             if (!string.IsNullOrEmpty(addr) && addr != "127.0.0.1:0") sb.Append("addr=").Append(addr).Append('\n');
             if (!string.IsNullOrEmpty(lan) && lan != "127.0.0.1:0" && lan != addr) sb.Append("lan=").Append(lan).Append('\n');
-            if (!hidden && UsableV6(v6) && v6 != addr) sb.Append("v6=").Append(v6).Append('\n');     // §323 另一条候选线（旧版不认这个键，忽略）
+            if (!hidden && UsableV6(v6) && v6 != addr) sb.Append("v6=").Append(v6).Append('\n');     // 另一条候选线（旧版不认这个键，忽略）
             if (sid != 0UL) sb.Append("sid=").Append(sid).Append('\n');
             sb.Append("token=").Append(token).Append('\n');
             if (hidden) sb.Append("hid=1\n");
@@ -761,7 +761,7 @@ namespace ForNet
         public void BroadcastState(string body)
         {
             if (!Enabled || MyPid <= 0 || string.IsNullOrEmpty(body)) return;
-            // §328.4 对决观众不发状态包（DuelBroadcastState 里也挡着）：别先编码，不然 mpdz= 把没发出去的包算成"实发完整包"
+            // 对决观众不发状态包（DuelBroadcastState 里也挡着）：别先编码，不然 mpdz= 把没发出去的包算成"实发完整包"
             //（多人会话 11-15 复测：观众 mpdz=0:3680874/3680874，看着像观众一直在发完整包）
             if (DuelOn && MyPid != DuelFa && MyPid != DuelFb) return;
             string tagged = StripSrc(DzEncode(StripSrc(body))) + "src=" + MyPid + "\n";
@@ -786,12 +786,12 @@ namespace ForNet
             for (int i = 0; i < list.Count; i++) { if (list[i].IsAi || list[i].Pid == MyPid) continue; list[i].StateTx++; SendState(list[i], tagged, crit); }
         }
 
-        // ---- §328 全互连状态包省流（用户 11-15"移植省流"：以前多人 / 对决每包都是 2.4–2.6 KB 的完整包，每包都要分片、8 人房每人上行约 4 Mbps）。
-        // 沿用 §223.4 的 SpecDelta / DzIn：我的状态流统一编一次码（发给每个人的是同一串包，转发机 / 经第三人转出去的也是），
+        // ---- 全互连状态包省流。
+        // 沿用 的 SpecDelta / DzIn：我的状态流统一编一次码（发给每个人的是同一串包，转发机 / 经第三人转出去的也是），
         // 平时只发变了的字段（变了连发 5 包），每 2 秒或房里的人变了发一次完整包；收的那头在交给游戏之前按发送方编号拼回完整包，游戏脚本一点不改。
         // 协商：我的每个状态包、直连握手、延迟探测都带 mdz=1（我会拼）；房主的状态包另带 mdh=<0|1>（房间设置"联机省流"，netcfg dz=）。
         // 只在 房里每个真人都说过 mdz=1、而且房主开着 时才编码；有一个旧版 / 还没说过的（刚进来）就全发完整包。经房主中转、从不直连探测的人
-        // 只能靠它自己的状态包报 mdz=1；对决观众不发状态包，又只经房主（§294 隐藏 IP）的话以前这一房一直发完整包——§328.2 改由房主在名单里担保（mdzl=）
+        // 只能靠它自己的状态包报 mdz=1；对决观众不发状态包，又只经房主（隐藏 IP）的话以前这一房一直发完整包—— 改由房主在名单里担保（mdzl=）
         public volatile int HostMdh = -1;              // 房主最近一包里的 mdh=（-1 = 没说 / 旧版房主）
         public volatile bool DzActive;                 // 这一包是不是在省流（面板 / 日志）
         readonly DzIn meshDzIn = new DzIn();
@@ -809,15 +809,15 @@ namespace ForNet
                     aFull = aiDzFullBytes; aSent = aiDzSentBytes;
                     foreach (var ae in aiDzOut.Values) { aFull += ae.FullBytes; aSent += ae.SentBytes; }
                 }
-                // §328.3 第 5 段 = 房主代发 AI 的 实发 / 原样 字节（不是房主 = 0/0）；前 4 段照旧（测试 / 面板按位置读）
+                // 第 5 段 = 房主代发 AI 的 实发 / 原样 字节（不是房主 = 0/0）；前 4 段照旧（测试 / 面板按位置读）
                 return (DzActive ? "1" : "0") + ":" + sent + "/" + full + ":" + meshDzIn.Merged + ":" + meshDzIn.Dropped + ":" + aSent + "/" + aFull;
             }
         }
 
-        // ---- §328.3 房主代发的 AI 状态包也省流（用户 11-15"也做掉"：以前一直完整包，房主上行多 ≈ AI 数 × 其他真人数 × 每路状态流）。
+        // ---- 房主代发的 AI 状态包也省流。
         // 每个 AI 一个 SpecDelta（AI 的流互相独立）；收的那头按 "a<编号>" 拼（和真人的 "m<编号>" 分开，编号以后换给真人也不串）。
-        // 只有房主编码，房主和每个成员都直连 / 控制连接，自己听得到对方说没说 mda=1（会拼 AI 包），不用 §328.2 的担保。
-        // 条件：房主开着"联机省流"而且其他每个真人都说过 mda=1；只有 §328 的成员（会拼真人包、不会拼 AI 包）在就发完整 AI 包，真人包照样省。
+        // 只有房主编码，房主和每个成员都直连 / 控制连接，自己听得到对方说没说 mda=1（会拼 AI 包），不用 的担保。
+        // 条件：房主开着"联机省流"而且其他每个真人都说过 mda=1；只有 的成员（会拼真人包、不会拼 AI 包）在就发完整 AI 包，真人包照样省。
         readonly Dictionary<int, SpecDelta> aiDzOut = new Dictionary<int, SpecDelta>();
         long aiDzFullBytes, aiDzSentBytes;
         bool aiDzActive;
@@ -871,7 +871,7 @@ namespace ForNet
             }
         }
 
-        // §328.1 选路说明里的分数：没有候选 = double.MaxValue / 无穷，以前被整串打印成三百多位数字（多人会话 11-15 实测看到）
+        // 选路说明里的分数：没有候选 = double.MaxValue / 无穷，以前被整串打印成三百多位数字（多人会话 11-15 实测看到）
         static string Sc(double v)
         {
             return double.IsNaN(v) ? "nan" : double.IsInfinity(v) || Math.Abs(v) >= 1e12 ? "inf" : Kv.F(v, "0");
@@ -902,7 +902,7 @@ namespace ForNet
             return all && humans > 0;
         }
 
-        // §328.2 房主担保：房主在名单 4NMP 里带 mdzl=<房主亲耳听到说过 mdz=1 的真人编号>（含房主自己）。
+        // 房主担保：房主在名单 4NMP 里带 mdzl=<房主亲耳听到说过 mdz=1 的真人编号>（含房主自己）。
         // 对决观众不发状态包、开了隐藏 IP 又只经房主，别人永远听不到它说 mdz=1；以前这时整房发完整包（进房时一包状态都没发出去才会这样，
         // 比如正在读图）。只用房主自己听到的（MdzOk），不转述别人担保的；每 2 秒随名单整份替换，人走了 / 换了就跟着变。
         string HostMdzCsvLocked()
@@ -929,12 +929,12 @@ namespace ForNet
         void DzLog(string zh, string en)
         {
             Log(L.T(zh, en));
-            NetLog.W(zh);      // §328.1 也进 net_conn.log（多人会话 11-15：DLL 模式下只在窗口日志里，搜不到）
+            NetLog.W(zh);      // 也进 net_conn.log（多人会话 11-15：DLL 模式下只在窗口日志里，搜不到）
         }
 
         string DzEncode(string body)
         {
-            // §331.1 状态包里写 mdai=1，不写 mda=1：对决房主的状态包里 mda= 是场地（game_duel DUEL.wire），撞名后游戏可能读到 "1"
+            // 状态包里写 mdai=1，不写 mda=1：对决房主的状态包里 mda= 是场地（game_duel DUEL.wire），撞名后游戏可能读到 "1"
             //（握手 / 探测包 4NMPHELLO / PING / PONG 是另一种消息，照旧 mda=1）
             string full = body + "mdz=1\nmdai=1\n" + (IsHost ? "mdh=" + (DzCfg.On ? "1" : "0") + "\n" : "");
             int sig, humans;
@@ -947,7 +947,7 @@ namespace ForNet
                 DzActive = false;
                 var e = meshDzOut;
                 if (e != null) { dzFullBytes += e.FullBytes; dzSentBytes += e.SentBytes; meshDzOut = null; }
-                // §328.1 房里没别的真人（只有我 + AI）时这包根本没发出去，不算进统计（多人会话 11-15：房主先和 AI 待了一阵，统计里实发占到 44%）
+                // 房里没别的真人（只有我 + AI）时这包根本没发出去，不算进统计（多人会话 11-15：房主先和 AI 待了一阵，统计里实发占到 44%）
                 if (humans > 0) { dzFullBytes += full.Length; dzSentBytes += full.Length; }
                 return full;
             }
@@ -963,7 +963,7 @@ namespace ForNet
             string dec = meshDzIn.Take(StripSrc(tagged), null, "m" + pid);
             if (dec == null) return null;
             MpPeerState p = Get(pid);
-            // §331.1 状态包里的"会拼 AI 包"标记改叫 mdai=1（mda= 是对决场地字段 §307 D1，同一个包里撞名）；11-15 的开发版发 mda=1，也认
+            // 状态包里的"会拼 AI 包"标记改叫 mdai=1（mda= 是对决场地字段 D1，同一个包里撞名）；11-15 的开发版发 mda=1，也认
             if (p != null) { p.MdzOk = HasMdz(dec); p.MdaOk = HasLine(dec, "mdai=1") || HasLine(dec, "mda=1"); }
             if (pid == HostPid)
             {
@@ -983,7 +983,7 @@ namespace ForNet
             }
             else
             {
-                // §328.3 房主代发的 AI 包：省流包按 "a<编号>" 拼回；完整包原样（记下当底）
+                // 房主代发的 AI 包：省流包按 "a<编号>" 拼回；完整包原样（记下当底）
                 string dec = meshDzIn.Take(StripSrc(tagged), null, "a" + pid);
                 if (dec == null) return;
                 tagged = dec + "src=" + pid + "\n";
@@ -997,16 +997,16 @@ namespace ForNet
 
         void SendState(MpPeerState p, string tagged, bool crit)
         {
-            // 有一条能用的直连路径（已确认 / 另开的 Steam 直连 / 控制连接 / LAN 地址）就不要绕中转；
-            // Steam 的"正在连"句柄也算：包先排着，连上就发。
-            bool ro = RelayOnly(p);     // §294 只能经房主：不直连、不等打洞
+            // 有一条能用的直连路径（已确认 / 另开的桥接平台直连 / 控制连接 / LAN 地址）就不要绕中转；
+            // 桥接平台的"正在连"句柄也算：包先排着，连上就发。
+            bool ro = RelayOnly(p);     // 只能经房主：不直连、不等打洞
             bool directOk = !ro && (p.DirectVerified || p.DirectHandle != null || (p.Handle != null && !NeedVerifiedDirect));
             // M4：刚介绍完的这 5 秒先让双方互发握手打洞，别一上来就把状态包丢给房主中转。
             // 关键包（mpd= / mpm=）例外：M3 约定这类字段一直双发，不能等。
             if (!ro && !directOk && !crit && (DateTime.UtcNow - p.BornAt).TotalSeconds < 5.0) return;
             bool dual = crit || p.DualSend;
             int relay = RelayOf(p);
-            // §240 服务器房：没有直连（或直连丢了）时另发一份给服务器，由服务器转给对方
+            // 服务器房：没有直连（或直连丢了）时另发一份给服务器，由服务器转给对方
             bool viaServer = false;
             if (!directOk && ServerRelay != null)
             {
@@ -1047,7 +1047,7 @@ namespace ForNet
             object h = p.SendHandle;
             if (h == null) return;
             if (Blocked(MyPid, p.Pid)) return;
-            if (RelayOnly(p)) return;     // §294 兜底：只经房主的对端绝不直发（直发会把我的地址给它）
+            if (RelayOnly(p)) return;     // 兜底：只经房主的对端绝不直发（直发会把我的地址给它）
             if (count) MpTx++;
             TrySend(h, body);
         }
@@ -1153,7 +1153,7 @@ namespace ForNet
             }
         }
 
-        // 房主正常退出时广播告别；§297 成员正常退出时只告诉房主（对决转发机走了房主立刻换人，不等 2 秒超时）
+        // 房主正常退出时广播告别； 成员正常退出时只告诉房主（对决转发机走了房主立刻换人，不等 2 秒超时）
         public void BroadcastBye()
         {
             if (!Enabled || MyPid <= 0) return;
@@ -1244,7 +1244,7 @@ namespace ForNet
             return list;
         }
 
-        // §286 换房主状态（客户端）：在等哪个候选人宣布、从什么时候开始等；等太久没宣布就跳过它重选
+        // 换房主状态（客户端）：在等哪个候选人宣布、从什么时候开始等；等太久没宣布就跳过它重选
         int waitNewHost;
         DateTime waitNewHostSince = DateTime.MinValue;
         readonly HashSet<int> skipCands = new HashSet<int>();
@@ -1259,7 +1259,7 @@ namespace ForNet
         {
             if (from == null || hostConfirmed || IsHost) return;
             if (ByHandle(from) != null) return;
-            AddIntro(HostPid, from is IPEndPoint ? from.ToString() : "", 0UL, "", from);     // §329 经桥接入房：句柄是桥接连接号，没有地址
+            AddIntro(HostPid, from is IPEndPoint ? from.ToString() : "", 0UL, "", from);     // 经桥接入房：句柄是桥接连接号，没有地址
         }
 
         // 发这条包的是谁（直连按地址认；不认识 = 0）
@@ -1295,17 +1295,17 @@ namespace ForNet
                     skipCands.Add(waitNewHost);
                     Log(L.T("多人网状：候选房主没宣布，跳过 ", "Mesh: candidate host never announced, skipping ") + waitNewHost);
                 }
-                int minPid = MyPid > 0 && !skipCands.Contains(MyPid) && !HideMe ? MyPid : int.MaxValue;     // §294 开了隐藏 IP 的人不当新房主
+                int minPid = MyPid > 0 && !skipCands.Contains(MyPid) && !HideMe ? MyPid : int.MaxValue;     // 开了隐藏 IP 的人不当新房主
                 foreach (var kv in peers)
                 {
                     int pid = kv.Key;
                     if (pid == oldHost || pid <= 0 || skipCands.Contains(pid) || aiPids.Contains(pid)) continue;
                     MpPeerState p = kv.Value;
-                    if (p.Hidden || p.IsAi) continue;     // §294；不把 AI 选成新房主
+                    if (p.Hidden || p.IsAi) continue;     // 不把 AI 选成新房主
                     double age = (now - p.LastAnyRx).TotalSeconds;
                     bool active = (p.LastAnyRx != DateTime.MinValue && age < HostLostAfter)
                                || (p.LastAnyRx == DateTime.MinValue && (now - p.BornAt).TotalSeconds < HostLostAfter);
-                    if (HideMe && RelayOnly(p)) active = true;     // §294 我和它之间只经旧房主：房主一走就看不到它的动静，不能当它走了
+                    if (HideMe && RelayOnly(p)) active = true;     // 我和它之间只经旧房主：房主一走就看不到它的动静，不能当它走了
                     if (active && pid < minPid) minPid = pid;
                 }
                 if (minPid == int.MaxValue) { if (MyPid > 0) minPid = MyPid; else return; }
@@ -1361,7 +1361,7 @@ namespace ForNet
             MigrateHost("bye");
         }
 
-        // §297 房主收到成员告别：记下来；对决开着就马上重算转发机（现任走了立刻换）。名单照旧按超时清，不在这里删人
+        // 房主收到成员告别：记下来；对决开着就马上重算转发机（现任走了立刻换）。名单照旧按超时清，不在这里删人
         void OnMemberBye(int pid)
         {
             if (pid <= 0 || pid == MyPid) return;
@@ -1377,7 +1377,7 @@ namespace ForNet
             Log(L.T("多人网状：成员 ", "Mesh: member ") + pid + L.T(" 告别离开", " said bye") + (wasRelay ? L.T("（是现任对决转发机）", " (current duel relay)") : ""));
         }
 
-        // §297 对决转发机掉线 / 离开的判定（房主用）：告别过、或超过 RelayLostAfterSec 没收到任何包
+        // 对决转发机掉线 / 离开的判定（房主用）：告别过、或超过 RelayLostAfterSec 没收到任何包
         bool PeerGone(MpPeerState p, DateTime now)
         {
             if (p.ByeAt != DateTime.MinValue)
@@ -1509,7 +1509,7 @@ namespace ForNet
             }
             if (max > 0) MpMax = max;
             string mdzl;
-            if (q.TryGetValue("mdzl", out mdzl)) ApplyHostMdz(mdzl);     // §328.2 旧版房主不带 → 不动，只靠自己听到的
+            if (q.TryGetValue("mdzl", out mdzl)) ApplyHostMdz(mdzl);     // 旧版房主不带 → 不动，只靠自己听到的
 
             if (OnRosterUpdated != null)
             {
@@ -1522,7 +1522,7 @@ namespace ForNet
         {
             got = 0;
             if (!Enabled || s == null) return false;
-            if (TestDropV4 && DropV4(from, s)) return true;     // §323 测试：成员之间的 IPv4 包全丢
+            if (TestDropV4 && DropV4(from, s)) return true;     // 测试：成员之间的 IPv4 包全丢
             if (s.StartsWith(WireTag.P + "MPMESH\n", StringComparison.Ordinal)) { OnIntro(from, s); return true; }
             if (s.StartsWith(WireTag.P + "MPHELLO\n", StringComparison.Ordinal)) { OnMeshHello(from, s); return true; }
             if (s.StartsWith(WireTag.P + "MPRELAY\n", StringComparison.Ordinal)) { OnRelay(from, s); return true; }
@@ -1676,14 +1676,14 @@ namespace ForNet
                 Log(L.T("多人网状：握手口令不对，忽略 ", "Mesh: hello token mismatch, ignored ") + pid);
                 return;
             }
-            if (d.ContainsKey("mdz")) p.MdzOk = true; if (d.ContainsKey("mda")) p.MdaOk = true;     // §328
-            // §280 双栈：房主可能把 A 按 IPv4 介绍给 B、把 B 按 IPv6 介绍给 A。握手来源和记着的地址不是同一族时不换
+            if (d.ContainsKey("mdz")) p.MdzOk = true; if (d.ContainsKey("mda")) p.MdaOk = true;
+            // 双栈：房主可能把 A 按 IPv4 介绍给 B、把 B 按 IPv6 介绍给 A。握手来源和记着的地址不是同一族时不换
             // （换了两边会对调，最后都往对方不认的地址发，状态包全被丢），只记成"也认这个地址"。同一族照旧换（NAT 换了端口靠这个）
             var fe = from as IPEndPoint;
             var he = p.Handle as IPEndPoint;
             if (fe != null && he != null && fe.AddressFamily != he.AddressFamily)
             {
-                // §323 另一族的握手只说明那条线通，不算当前这条（以前也把 DirectVerified 设上，当前那族不通时要等 2.5 秒才发现）
+                // 另一族的握手只说明那条线通，不算当前这条（以前也把 DirectVerified 设上，当前那族不通时要等 2.5 秒才发现）
                 p.AltHandle = from;
                 bool firstAlt = !p.AltVerified;
                 p.AltVerified = true;
@@ -1704,10 +1704,10 @@ namespace ForNet
             if (p.Handle == null || string.IsNullOrEmpty(p.Token) || MyPid <= 0) return;
             if (Blocked(MyPid, p.Pid)) return;
             p.LastHelloAt = now;
-            TrySend(p.Handle, WireTag.P + "MPHELLO\npid=" + MyPid + "\ntoken=" + p.Token + "\nmdz=1\nmda=1\n");     // §328 我会拼省流包
+            TrySend(p.Handle, WireTag.P + "MPHELLO\npid=" + MyPid + "\ntoken=" + p.Token + "\nmdz=1\nmda=1\n");     // 我会拼省流包
         }
 
-        // ---- §323 另一个地址族（IPv4 ↔ IPv6）的候选线：用户 11-15"大厅加入时 IPv6 / v4 / 桥接自适应，哪个能连 / 连得快用哪个"。
+        // ---- 另一个地址族（IPv4 ↔ IPv6）的候选线：。
         // 房主介绍时带 v6=（对方握手里自己报的公网 IPv6 端点），两边同时往当前这条（Handle）和另一族（AltHandle）发握手 / 探测；
         // 连续 AltPickTicks 秒另一族明显更快（快 AltSwitchMs 以上）或当前这条断了，就对调 Handle / AltHandle。两边各自判，
         // 收包两条都认（ByHandle 认 AltHandle）。经第三人中转 / 桥接照旧接在后面（看的是对调后的 DirectRtt / LastDirectRx）。
@@ -1722,7 +1722,7 @@ namespace ForNet
             return ep != null && ep.AddressFamily == AddressFamily.InterNetworkV6 && ep.Port > 0 && !ep.Address.IsIPv6LinkLocal;
         }
 
-        // §323 测试钩子（FORNET_TEST_DROPV4=1，只在客机上用）：成员之间（不含房主）从 IPv4 来的网状包全丢 = 模拟"IPv4 这条线不通"
+        // 测试钩子（FORNET_=1，只在客机上用）：成员之间（不含房主）从 IPv4 来的网状包全丢 = 模拟"IPv4 这条线不通"
         public static readonly bool TestDropV4 = WireTag.Env("TEST_DROPV4") == "1";
         bool DropV4(object from, string s)
         {
@@ -1772,7 +1772,7 @@ namespace ForNet
             if (!p.AltVerified && (now - p.LastAltHelloAt).TotalSeconds >= 2.0)
             {
                 p.LastAltHelloAt = now;
-                TrySend(ae, WireTag.P + "MPHELLO\npid=" + MyPid + "\ntoken=" + p.Token + "\nmdz=1\nmda=1\n");     // §328 我会拼省流包
+                TrySend(ae, WireTag.P + "MPHELLO\npid=" + MyPid + "\ntoken=" + p.Token + "\nmdz=1\nmda=1\n");     // 我会拼省流包
             }
             if ((now - p.LastAltPingAt).TotalSeconds >= PingEvery)
             {
@@ -1825,9 +1825,9 @@ namespace ForNet
             DateTime now = DateTime.UtcNow;
             if (p != null)
             {
-                if (d.ContainsKey("mdz")) p.MdzOk = true; if (d.ContainsKey("mda")) p.MdaOk = true;     // §328
+                if (d.ContainsKey("mdz")) p.MdzOk = true; if (d.ContainsKey("mda")) p.MdaOk = true;
                 if (IsBuHandle(p, from)) p.LastBuRx = now;
-                else if (IsAltOnly(p, from)) p.LastAltRx = now;     // §323 另一条线的探测不算当前这条
+                else if (IsAltOnly(p, from)) p.LastAltRx = now;     // 另一条线的探测不算当前这条
                 else p.LastDirectRx = now;
                 string hageStr;
                 if (d.TryGetValue("hage", out hageStr))
@@ -1852,8 +1852,8 @@ namespace ForNet
             if (Blocked(p.Pid, MyPid)) return;
             var d = Kv.Parse(s);
             DateTime now = DateTime.UtcNow;
-            if (d.ContainsKey("mdz")) p.MdzOk = true; if (d.ContainsKey("mda")) p.MdaOk = true;     // §328
-            if (IsAltOnly(p, from))      // §323 另一条线的往返
+            if (d.ContainsKey("mdz")) p.MdzOk = true; if (d.ContainsKey("mda")) p.MdaOk = true;
+            if (IsAltOnly(p, from))      // 另一条线的往返
             {
                 string ta;
                 long ta0;
@@ -1885,7 +1885,7 @@ namespace ForNet
             if (p.DirectRtt < 0)
             {
                 // 第一次测到直连 RTT：连接建立前发出去的 ping 不能算丢包（否则刚连上就判成 50% 丢包、
-                // 白白双发一两秒；Steam 第一次 ping 常常排在"正在连接"的句柄里）
+                // 白白双发一两秒；桥接平台第一次 ping 常常排在"正在连接"的句柄里）
                 p.DirectLoss = 0.1;
                 p.DirectMaxLoss = 0;
                 p.DirectMiss = 0;
@@ -2009,7 +2009,7 @@ namespace ForNet
             // 中转上限只算真正转发的状态 / 可靠事件；ping 探测不占名额，否则几对探测就把名额占满
             if (kind == "state" || kind == "rel" || kind == "ctrl")
             {
-                // §241 名额按"一对人"算，不按方向算。以前 key 是 from>to：B→C 和 C→B 各占一个名额，
+                // 名额按"一对人"算，不按方向算。以前 key 是 from>to：B→C 和 C→B 各占一个名额，
                 // 4 人房里再帮一对（比如 host→B）就满 3 个，C→B 会被 max 限制静默丢掉，表现成
                 // "B 一直收不到经中转的 C"（test_mp_mesh_steam 的 rxv=0 偶发就是这么来的）。
                 int lo = Math.Min(fromPid, toPid), hi = Math.Max(fromPid, toPid);
@@ -2020,7 +2020,7 @@ namespace ForNet
                     foreach (var kv in relayUse) if ((DateTime.UtcNow - kv.Value).TotalSeconds > 5.0) dead.Add(kv.Key);
                     for (int i = 0; i < dead.Count; i++) relayUse.Remove(dead[i]);
                     MpPeerState fp = Get(fromPid);
-                    bool hidPair = IsHost && ((fp != null && fp.Hidden) || to.Hidden);     // §294 隐藏 IP 的人只能经房主，房主不限名额
+                    bool hidPair = IsHost && ((fp != null && fp.Hidden) || to.Hidden);     // 隐藏 IP 的人只能经房主，房主不限名额
                     if (!hidPair && !relayUse.ContainsKey(key) && relayUse.Count >= MaxRelayPairs) return;
                     relayUse[key] = DateTime.UtcNow;
                 }
@@ -2101,7 +2101,7 @@ namespace ForNet
             {
                 MpPeerState p = list[i];
                 if (p.IsAi) continue;
-                if (RelayOnly(p))     // §294 只经房主：不解析地址、不握手、不直连测延迟（这些都会把我的地址给对方）
+                if (RelayOnly(p))     // 只经房主：不解析地址、不握手、不直连测延迟（这些都会把我的地址给对方）
                 {
                     if (p.Route != PeerRoute.Via || p.RelayPid != HostPid) { p.Route = PeerRoute.Via; p.RelayPid = HostPid; p.RouteWhy = "hideip"; }
                     if (p.Rel != null) p.Rel.Tick(now);
@@ -2134,7 +2134,7 @@ namespace ForNet
                 }
                 if (MyPid > 0 && !p.DirectVerified && (now - p.LastHelloAt).TotalSeconds >= HelloEvery)
                     SendHello(p, now);
-                AltStep(p, now);     // §323
+                AltStep(p, now);
                 if (p.SendHandle == null) continue;
                 double curHostAge = HostRxAge(now);
                 double pingInterval = (!IsHost && HostPid > 0 && curHostAge >= 2.0) ? 0.5 : PingEvery;
@@ -2198,7 +2198,7 @@ namespace ForNet
                 MpPeerState c = list[i];
                 if (c.Pid == p.Pid || c.Pid == MyPid) continue;
                 if (c.SendHandle == null || (!c.DirectVerified && c.Pid != HostPid && !IsHost)) continue;
-                if (RelayOnly(c)) continue;     // §294
+                if (RelayOnly(c)) continue;
                 if (Blocked(MyPid, c.Pid)) continue;
                 MpProbe pr;
                 lock (sync)
@@ -2307,21 +2307,21 @@ namespace ForNet
         }
 
         // =====================================================================
-        // 新版 1v1（对决模式 duel）网络层（docs/MESH.md「对决模式的发包路线」、HANDOVER 对决一节）
-        //   两位选手之间直连（沿用每对选路）；每位选手另外只发 1 份给"转发机"，转发机把选手的包转给其他所有观众；
-        //   观众不发状态包。转发机 = 没上场的人里网络最好的那台，由房主统一算、统一宣布。
+        // 新版 1v1（对决模式 duel）网络层（「对决模式的发包路线」、 对决一节）
+        // 两位选手之间直连（沿用每对选路）；每位选手另外只发 1 份给"转发机"，转发机把选手的包转给其他所有观众；
+        // 观众不发状态包。转发机 = 没上场的人里网络最好的那台，由房主统一算、统一宣布。
         // 协议（都走原来的签名 Wire / 中转头里的 ctrl）：
-        //   4NMPDUEL    房主 → 所有人：on= fa= fb= relay= live= cap= epoch= owner= seq=     每 2 秒一次，变化时立刻发
-        //   4NMPNET     成员 → 房主：pid= epoch= p=<对端:RTT毫秒:丢包率,…> rxage= rxloss= rxgap=   每 2 秒一次
-        //   4NMPREFUSE  房主 → 想加入的人：why=specfull cap=<观众上限>                             观众满了，加入被拒
-        //   经转发机转出去的选手包 = 4NMPRELAY kind=dstate from=<选手> to=<观众> relay=<转发机>，payload 原样（src=<选手>、seq 不动）
+        // 4NMPDUEL 房主 → 所有人：on= fa= fb= relay= live= cap= epoch= owner= seq= 每 2 秒一次，变化时立刻发
+        // 4NMPNET 成员 → 房主：pid= epoch= p=<对端:RTT毫秒:丢包率,…> rxage= rxloss= rxgap= 每 2 秒一次
+        // 4NMPREFUSE 房主 → 想加入的人：why=specfull cap=<观众上限> 观众满了，加入被拒
+        // 经转发机转出去的选手包 = 4NMPRELAY kind=dstate from=<选手> to=<观众> relay=<转发机>，payload 原样（src=<选手>、seq 不动）
         // =====================================================================
         public const int DuelCapDefault = MpCfg.Limit - 2, DuelCapMax = MpCfg.Limit - 2;     // 11-15 观众 = 房间人数 − 2，房间人数和其他玩法同一个上限（以前 8 / 16）
         public const double DuelAnnounceEvery = 2.0, DuelReportEvery = 2.0, DuelEvalEvery = 0.5;
         // 转发机打分（越小越好，单位 ms）：
-        //   score = 2 × max(到各位上场选手的 RTT) + mean(到各位其他观众的 RTT)
-        //         + 300 × (到选手的最大丢包率 + 到观众的平均丢包率) + 现任才有的收包扣分
-        //   收包扣分（观众报上来的"收选手包"质量，近似转发机上行不够）= 平均收包丢包率 × 600 + min(300, max(0, 平均最大间隔 - 150) × 0.5)
+        // score = 2 × max(到各位上场选手的 RTT) + mean(到各位其他观众的 RTT)
+        // + 300 × (到选手的最大丢包率 + 到观众的平均丢包率) + 现任才有的收包扣分
+        // 收包扣分（观众报上来的"收选手包"质量，近似转发机上行不够）= 平均收包丢包率 × 600 + min(300, max(0, 平均最大间隔 - 150) × 0.5)
         public const double RelayFighterWeight = 2.0;
         public const double RelayLossMs = 300.0;
         public const double RelayMissingSpecRttMs = 400.0;     // 候选人没测到某位观众：按 400 ms 算（没测到选手 = 不能靠分数当选）
@@ -2731,7 +2731,7 @@ namespace ForNet
             }
         }
 
-        // 成员收房主宣布的对决状态：只认当前房主本人发的（同 §286.1：直连按地址、中转按中转头里的发送人）；
+        // 成员收房主宣布的对决状态：只认当前房主本人发的（同 ：直连按地址、中转按中转头里的发送人）；
         // 旧的（代数小 / 同代数 seq 不新）不认
         void OnDuel(object from, string s, int viaPid)
         {
@@ -2794,7 +2794,7 @@ namespace ForNet
                     var rep = MakeReport(now);
                     lock (sync) duelReports[MyPid] = rep;
                 }
-                // §297 现任转发机一到掉线门槛（2 秒没包 / 告别）就马上重算，不等下一个 0.5 秒评估点（最多省 0.5 秒）
+                // 现任转发机一到掉线门槛（2 秒没包 / 告别）就马上重算，不等下一个 0.5 秒评估点（最多省 0.5 秒）
                 bool relayGone = false;
                 int curRelay = DuelRelay;
                 if (curRelay > 0 && curRelay != MyPid && (now - lastDuelEval).TotalSeconds >= 0.05)
@@ -2861,7 +2861,7 @@ namespace ForNet
                 if (DuelFb > 0 && DuelFb != DuelFa && alive.TryGetValue(DuelFb, out bOk) && bOk) fighters.Add(DuelFb);
                 // 候选 = 活着的、没上场的；兜底顺序：房主（不上场时）优先，其余按进房先后
                 var cands = new List<int>();
-                foreach (var kv in alive) if (kv.Value && !fighters.Contains(kv.Key) && !(peers.ContainsKey(kv.Key) && peers[kv.Key].Hidden)) cands.Add(kv.Key);     // §294 隐藏 IP 的人不当转发机
+                foreach (var kv in alive) if (kv.Value && !fighters.Contains(kv.Key) && !(peers.ContainsKey(kv.Key) && peers[kv.Key].Hidden)) cands.Add(kv.Key);     // 隐藏 IP 的人不当转发机
                 cands.Sort(delegate(int a, int b)
                 {
                     if (a == me) return b == me ? 0 : -1;
@@ -2986,8 +2986,8 @@ namespace ForNet
             return true;
         }
 
-        // §311 对决模式下房间人数到顶（编号分配满了，没走到"观众已满"那条）：也明说"房间已满"，不让人默默排队。
-        // 普通多人房满了照旧排队等空位（§298.2）
+        // 对决模式下房间人数到顶（编号分配满了，没走到"观众已满"那条）：也明说"房间已满"，不让人默默排队。
+        // 普通多人房满了照旧排队等空位
         public bool DuelRefuseFull(object from)
         {
             if (!IsHost || !DuelOn || from == null) return false;
@@ -3004,7 +3004,7 @@ namespace ForNet
             return true;
         }
 
-        // §321 旧版（不认多人房）发普通 1v1 握手想进多人房 / 对决房：以前什么都不回，对方一直"未连接"。
+        // 旧版（不认多人房）发普通 1v1 握手想进多人房 / 对决房：以前什么都不回，对方一直"未连接"。
         // 旧版只认得几条固定提示，最贴切的是"版本不一致：你 vX / 对方 vY，建议两边更新到同一版本"——收到带 av= 的握手就会显示。
         // 所以回一个只带版本号的握手（不带 seq=，对方不会当成连上）；每个地址 1 秒最多一次，日志 5 秒一条
         readonly Dictionary<string, DateTime> oldHelloAt = new Dictionary<string, DateTime>();
@@ -3144,7 +3144,7 @@ namespace ForNet
             buSub = true;
         }
 
-        // ---- §329 服务器大厅多人房：直连打不通房主时经桥接入房（房间设置"对局走桥接" = 直连失败时走桥接）。
+        // ---- 服务器大厅多人房：直连打不通房主时经桥接入房（房间设置"对局走桥接" = 直连失败时走桥接）。
         // 房主：大厅服务器介绍过的加入者桥接 ID（60 秒内有效）连进来就接住；客机：直连 Tries 次不通后连房主的监听口 BuPort(房主编号)。
         // 这条连接上的包不走升级测速那套，原样交给 ServerLink（JoinBridgeRx：房主按入房 / 成员包处理，客机按房主包处理）。
         // 经桥接入房的人按"隐藏 IP"成员算：房主不介绍它的地址，它和别的成员之间都经房主转发。
@@ -3316,11 +3316,11 @@ namespace ForNet
                 MpPeerState fp = PeerByBuHandle(m.Key);
                 if (fp == null)
                 {
-                    // §329 入房那条桥接：原样交给 ServerLink（它按直连收包那套验签 / 收人 / 认房主）
+                    // 入房那条桥接：原样交给 ServerLink（它按直连收包那套验签 / 收人 / 认房主）
                     if (JoinBridgeRx != null && IsJoinHandle((object)m.Key))
                     {
                         bool took = false;
-                        try { took = JoinBridgeRx((object)m.Key, m.Value); } catch (Exception ex) { Log("§329 JoinBridgeRx: " + ex.Message); }
+                        try { took = JoinBridgeRx((object)m.Key, m.Value); } catch (Exception ex) { Log("JoinBridgeRx: " + ex.Message); }
                         if (took) got++;
                     }
                     continue;
@@ -3342,7 +3342,7 @@ namespace ForNet
         void OnBuConnStatus(uint h, int st, ulong remoteSid)
         {
             if (BridgePrimary || h == 0) return;
-            if (OnJoinConnStatus(h, st, remoteSid)) return;     // §329 入房那条桥接
+            if (OnJoinConnStatus(h, st, remoteSid)) return;     // 入房那条桥接
             if (st == Bridge.StConnecting)
             {
                 MpPeerState existing = PeerByBuHandle(h);

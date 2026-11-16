@@ -1,4 +1,4 @@
-/* 示例联机程序插件（docs/EXTENSIONS_API.md，X2）。和 inproc/game_steam.c 一样不用 CRT：clang --target=x86_64-pc-windows-msvc -ffreestanding。
+/* 示例联机程序插件（docs/EXTENSIONS_API.md，X2）。和游戏那边的桥接 DLL 一样不用 CRT：clang --target=x86_64-pc-windows-msvc -ffreestanding。
  * 导出 fnx_init / fnx_cmd / fnx_tick / fnx_shutdown。收到 ping=1 回 pong=1；收到 to=<host:port> data=<文字> 就经基底 send 发出去
  * （基底会查同意：没同意回 sent=denied），tick 里收自己 socket 上的回包放进 got=。 */
 #include <stdint.h>

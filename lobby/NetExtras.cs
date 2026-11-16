@@ -1,4 +1,4 @@
-// 连接方式的辅助（net-ui 分支，docs/NETWORK_UI.md §2.3）：模式名、配置文件、UPnP 端口映射、Tailscale 节点、地址解析。
+// 连接方式的辅助（net-ui 分支，docs/NETWORK_UI.md）：模式名、配置文件、UPnP 端口映射、Tailscale 节点、地址解析。
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -15,33 +15,33 @@ using System.Web.Script.Serialization;
 namespace ForNet
 {
     // 连接方式。bridge 经游戏里的桥接 DLL（扩展包提供的外部联机服务）连；lan 是 UDP；
-    // v0.20.3：广域网（wan）并进服务器大厅（用户："广域网没有房间列表，只能一对一输入 IP，作为服务器大厅下的一个子选项就可以"）——
+    // v0.20.3：广域网（wan）并进服务器大厅——
     // 服务器大厅里"输入 IP 直连"走原来广域网的 UDP 直连；主机监听设置里的端口，没人经大厅加入时也接受直接连进来的客机。
-    // v0.20.2：虚拟局域网（vlan）并进局域网（用户："虚拟局域网的软件装好连通后，走局域网联机就行"）——局域网顺带单播给
+    // v0.20.2：虚拟局域网（vlan）并进局域网——局域网顺带单播给
     // Tailscale 节点、列出节点、显示 / 复制虚拟网卡地址。旧配置 / 旧面板发来的 vlan 一律当 lan（Valid）；
     // server 是自建服务器大厅（UDP 打洞，不通走服务器中转，ServerLobby.cs）。顺序 = 游戏内面板按 End 换方式的顺序
     static class Modes
     {
-        // §110.9 起开发版默认不列 Steam 两种；§124.2 用户 2026-11-06 21:4x"直接把这个配置设置打开"（私人内测的人不用手改 netcfg）：
-        // 带 Steam 的版本（开发版 / 内测包）改成默认列，netcfg.txt 写 steam=0 才藏。公开版不编这段，不受影响。
+        // 起开发版默认不列桥接平台两种； （私人内测的人不用手改 netcfg）：
+        // 带桥接平台的版本（开发版 / 内测包）改成默认列，netcfg.txt 写桥接平台=0 才藏。公开版不编这段，不受影响。
         // Known = 全部（读"最近连过的"用，藏起来的也留着）
-        // §120.11：Steam 好友改走游戏里的 Steam 桥（SteamBridge.cs），桥不在（Bridge.Available）时也不列；§124 的 Steam 大厅 v0.34 起移除（TASK_0.34 §2.1，旧配置 steamlobby → steam）
+        // 平台好友改走游戏里的桥接 DLL，桥不在（Bridge.Available）时也不列； 的平台大厅 v0.34 起移除（旧配置 steamlobby → 桥接平台）
         public static bool ShowBridge = true;
-        public static readonly string[] Known = { "bridge", "server", "ranked", "lan", "ai" };     // v0.20.4 用户定的顺序；§75 本地 AI 放最后；§110 武林盟主跟在服务器大厅后面
+        public static readonly string[] Known = { "bridge", "server", "ranked", "lan", "ai" };     // v0.20.4 定的顺序； 本地 AI 放最后； 排位跟在服务器大厅后面
         static readonly string[] Plain = { "server", "ranked", "lan", "ai" };
         public static string[] All { get { return RankedSupport.Modes(ShowBridge && Bridge.Available ? Known : Plain); } }     // F4c-1：没编排位就没有 ranked
 
-        public static string Valid(string m) { if (m == "steamlobby") m = "server"; if (m == "steam") m = "bridge"; return m == "wan" ? "server" : Array.IndexOf(All, m) >= 0 ? m : "lan"; }     // 0.34 旧的 Steam 大厅 → 服务器大厅；F4c-2 旧方式名 steam → bridge（面板没有 steam 标签了）     // vlan → lan、wan → server、steamlobby → steam（v0.34 删大厅；没 Steam 时自然退 lan）
+        public static string Valid(string m) { if (m == "steamlobby") m = "server"; if (m == "steam") m = "bridge"; return m == "wan" ? "server" : Array.IndexOf(All, m) >= 0 ? m : "lan"; }     // 0.34 旧的平台大厅 → 服务器大厅；F4c-2 旧方式名桥接平台 → bridge（面板没有桥接平台标签了）     // vlan → lan、wan → server、steamlobby → 桥接平台（v0.34 删大厅；没桥接平台时自然退 lan）
 
-        // §85 能开房的方式（AI 对战时等人的房间）：除了 ai 都行，顺序同 All
+        // 能开房的方式（AI 对战时等人的房间）：除了 ai 都行，顺序同 All
         static readonly string[] RoomsAll = { "bridge", "server", "lan" }, RoomsPlain = { "server", "lan" };
         public static string[] Rooms { get { return ShowBridge && Bridge.Available ? RoomsAll : RoomsPlain; } }
-        public static string ValidRoom(string m) { m = Valid(m); return Array.IndexOf(Rooms, m) >= 0 ? m : "lan"; }     // ai / ranked（§110）不能开等人的房间
+        public static string ValidRoom(string m) { m = Valid(m); return Array.IndexOf(Rooms, m) >= 0 ? m : "lan"; }     // ai / ranked不能开等人的房间
 
-        // 要登 Steam 的方式（选了才初始化 Steam，见 Bridge.cs 文件头）
+        // 要登桥接平台的方式（选了才初始化桥接平台，见 Bridge.cs 文件头）
         public static bool IsBridge(string m) { return m == "bridge"; }
 
-        // 走服务器大厅那一套（ServerLink）的方式：服务器大厅、§110 武林盟主（排位房间只在服务器大厅里登记）
+        // 走服务器大厅那一套（ServerLink）的方式：服务器大厅、 排位（排位房间只在服务器大厅里登记）
         public static bool IsServer(string m) { return m == "server" || m == "ranked"; }
 
         public static string Name(string m)
@@ -50,7 +50,7 @@ namespace ForNet
             {
                 case "bridge": return L.T("桥接好友", "Bridge friends");
                 case "server": return L.T("服务器大厅（含 IP 直连）", "Lobby server (incl. direct IP)");
-                case "ranked": return L.T("武林盟主（排位，经大厅服务器）", "Ranked (via the lobby server)");
+                case "ranked": return L.T(GameInfo.RankedModeZh, "Ranked (via the lobby server)");
                 case "ai": return L.T("本地 AI 对战（不联网）", "Local AI battle (offline)");
                 default: return L.T("局域网（含 Tailscale / ZeroTier）", "LAN (incl. Tailscale / ZeroTier)");
             }
@@ -66,24 +66,24 @@ namespace ForNet
         public string Server = "";
         public int Port = Session.GamePort;
         public bool Upnp;
-        public bool Relay;          // §102 服务器大厅：允许走服务器中转（默认关；服务器也得开 --relay）
-        public bool BridgeFriends;   // 0.34 最终方案 2：在"最近"页显示 Steam 好友、向好友公开"正在开房"（默认关，开要二次确认 steam_friends）
-        public bool HideIp;         // §294 多人房隐藏我的 IP（netcfg hideip=1）
+        public bool Relay;          // 服务器大厅：允许走服务器中转（默认关；服务器也得开 --relay）
+        public bool BridgeFriends;   // 0.34 最终方案 2：在"最近"页显示平台好友、向好友公开"正在开房"（默认关，开要二次确认 steam_friends）
+        public bool HideIp;         // 多人房隐藏我的 IP（netcfg hideip=1）
         public bool Hide;           // 0.34 隐身：登记 / 广播不带主机标记（bh）、不写富状态——别人的"最近" / 好友列表里看不到我
-        // §279（用户 11-13）房间设置"对局走桥接"三档：0 关闭 / 1 直连失败时走桥接（默认）/ 2 一直桥接。只管我开的房；
+        // 房间设置"对局走桥接"三档：0 关闭 / 1 直连失败时走桥接（默认）/ 2 一直桥接。只管我开的房；
         // 客机一律按主机的设置连（自己设成什么都不管）。用桥接要同意过 bridge_match：1 档没同意就只走直连，2 档开房时会问
         public int BridgeMode = 1;
-        public bool BridgeRoom { get { return BridgeMode == 2; } }     // 一直桥接（以前的"对局走 Steam：开"）
+        public bool BridgeRoom { get { return BridgeMode == 2; } }     // 一直桥接（以前的"对局走桥接平台：开"）
         public bool BridgeUp = true;    // 模式 1 直连慢时自动试桥接（默认开，netcfg bridgeup=0 关）
         public int BridgeUpMs = 150;    // 触发试桥接的直连中位 RTT 阈值（0-2000，默认 150 ms）
-        public bool Safe;           // 0.34 §2.4 安全模式（L0，本地硬开关）：只留局域网 / 本地 AI，不连大厅服务器、不碰 Steam；不依赖服务器，不会自己恢复
-        public int MaxSpec = 4;     // §141 房间设置：观战 / 排队人数上限（0 = 不让观战；0 / 2 / 4 / 8）
+        public bool Safe;           // 0.34 安全模式（L0，本地硬开关）：只留局域网 / 本地 AI，不连大厅服务器、不碰桥接平台；不依赖服务器，不会自己恢复
+        public int MaxSpec = 4;     // 房间设置：观战 / 排队人数上限（0 = 不让观战；0 / 2 / 4 / 8）
         public bool HostSpec;       // M2 房间设置：主机只观战（解说模式）
-        public int AiLevel = 1;     // §75 本地 AI 难度：0 简单 / 1 普通 / 2 困难（LocalAi.Levels）
-        public IAiLoad AiLoad = LocalAiSupport.NewLoad();   // §114 AI 装备（键名由游戏适配定；不合法的值不认，用默认）
-        public bool AiRoom;                 // §85 AI 对战时同时开房等真人（开关）
-        public string AiRoomMode = "lan";   // §85 等人的房间用哪种连接方式（不能是 ai）
-        public bool Bridge = true;      // 列不列 Steam 两种方式（§124.2 默认列；netcfg.txt 写 steam=0 才藏，见 Modes.ShowBridge）
+        public int AiLevel = 1;     // 本地 AI 难度：0 简单 / 1 普通 / 2 困难（LocalAi.Levels）
+        public IAiLoad AiLoad = LocalAiSupport.NewLoad();   // AI 装备（键名由游戏适配定；不合法的值不认，用默认）
+        public bool AiRoom;                 // AI 对战时同时开房等真人（开关）
+        public string AiRoomMode = "lan";   // 等人的房间用哪种连接方式（不能是 ai）
+        public bool Bridge = true;      // 列不列桥接平台两种方式（默认列；netcfg.txt 写桥接平台=0 才藏，见 Modes.ShowBridge）
         public string Secret = "";     // v0.22.0 联机密码（明文存这里：只是两个人对局用的共享口令）；空 = 不签名
         public readonly Dictionary<string, List<string>> Recent = new Dictionary<string, List<string>>();
         readonly string path;
@@ -95,34 +95,34 @@ namespace ForNet
             if (d == null) return;
             string v;
             int n;
-            if (d.TryGetValue("bridge", out v) || d.TryGetValue("steam", out v)) Bridge = v == "1";     // 旧配置键 steam= 照认     // 要在认 mode 之前：藏着时 mode=steam 会被当成 lan
-            // §136 用户 2026-11-07 截图：Steam 两种方式不见了。§110.9（11-06，默认藏）那几版存配置时自动写了 steam=0，
-            // §124.2 改回默认列以后这行还在、照样藏。新版存配置时多写 steamset=1：没有它的 steam=0 当成旧版自动写的、不算（照常列），
-            // 有它的 steam=0 才是玩家自己关的
+            if (d.TryGetValue("bridge", out v) || d.TryGetValue("steam", out v)) Bridge = v == "1";     // 旧配置键桥接平台= 照认     // 要在认 mode 之前：藏着时 mode=桥接平台会被当成 lan
+            // 桥接平台两种方式不见了。（11-06，默认藏）那几版存配置时自动写了桥接平台=0，
+            // 改回默认列以后这行还在、照样藏。新版存配置时多写 steamset=1：没有它的桥接平台=0 当成旧版自动写的、不算（照常列），
+            // 有它的桥接平台=0 才是玩家自己关的
             string set;
             if (!Bridge && !d.TryGetValue("bridgeset", out set) && !d.TryGetValue("steamset", out set)) Bridge = true;
             Modes.ShowBridge = Bridge;
-            if (d.TryGetValue("mode", out v)) { Mode = Modes.Valid(v); if (Mode == "bridge") Mode = "server"; }     // 0.34 评审：steam 方式只在从"最近"页连好友时临时用，启动时落到服务器大厅
+            if (d.TryGetValue("mode", out v)) { Mode = Modes.Valid(v); if (Mode == "bridge") Mode = "server"; }     // 0.34 评审：桥接平台方式只在从"最近"页连好友时临时用，启动时落到服务器大厅
             if (d.TryGetValue("name", out v) && v.Length > 0) Name = v;
             if (d.TryGetValue("port", out v) && int.TryParse(v, out n) && n > 0 && n < 65536) Port = n;
             if (d.TryGetValue("upnp", out v)) Upnp = v == "1";
             if (d.TryGetValue("relay", out v)) Relay = v == "1";
             if (d.TryGetValue("bridgefriends", out v) || d.TryGetValue("steamfriends", out v)) BridgeFriends = v == "1";     // 旧键 steamfriends= 照认     // 0.34
             if (d.TryGetValue("hide", out v)) { Hide = v == "1"; Ident.Hidden = Hide; }
-            if (d.TryGetValue("hideip", out v)) { HideIp = v == "1"; ForNet.MpMesh.HideIpPref = HideIp; }     // §294
-            // §279 新键 bridgemode=0/1/2；旧键 bridgeroom= / steamroom=：1（以前的"开"）= 一直桥接，0（以前的默认关）= 新默认 1
+            if (d.TryGetValue("hideip", out v)) { HideIp = v == "1"; ForNet.MpMesh.HideIpPref = HideIp; }
+            // 新键 bridgemode=0/1/2；旧键 bridgeroom= / steamroom=：1（以前的"开"）= 一直桥接，0（以前的默认关）= 新默认 1
             int bm;
             if (d.TryGetValue("bridgemode", out v) && int.TryParse(v, out bm) && bm >= 0 && bm <= 2) BridgeMode = bm;
-            else if (d.TryGetValue("bridgeroom", out v) || d.TryGetValue("steamroom", out v)) BridgeMode = v == "1" ? 2 : 1;     // 旧键 steamroom= 照认     // 0.34（公开版没有 Steam，内测版留下的 steamroom=1 不认）
+            else if (d.TryGetValue("bridgeroom", out v) || d.TryGetValue("steamroom", out v)) BridgeMode = v == "1" ? 2 : 1;     // 旧键 steamroom= 照认     // 0.34（公开版没有桥接平台，内测版留下的 steamroom=1 不认）
             if (d.TryGetValue("safe", out v)) Safe = v == "1";     // 0.34 L0
-            if (d.TryGetValue("ipv6", out v)) NetBind.V6 = v != "0";     // §280 手动写 ipv6=0 退回只用 IPv4（面板里没有这项）
-            ForNet.Bridge.AllowPresence(BridgeFriends && !Hide && !Safe);     // 0.34 窗口 / 命令行两条路都经这里（安全模式启动时也不开）（Cfg 里 Steam 是字段名，要写全名）：桥连上后才真的发 R
-            if (d.TryGetValue("maxspec", out v) && int.TryParse(v, out n) && n >= 0 && n <= 16) MaxSpec = n;     // §295 对决可到 16
+            if (d.TryGetValue("ipv6", out v)) NetBind.V6 = v != "0";     // 手动写 ipv6=0 退回只用 IPv4（面板里没有这项）
+            ForNet.Bridge.AllowPresence(BridgeFriends && !Hide && !Safe);     // 0.34 窗口 / 命令行两条路都经这里（安全模式启动时也不开）（Cfg 里桥接平台是字段名，要写全名）：桥连上后才真的发 R
+            if (d.TryGetValue("maxspec", out v) && int.TryParse(v, out n) && n >= 0 && n <= 16) MaxSpec = n;     // 对决可到 16
             SpecCfg.Max = Math.Min(MaxSpec, SpecCfg.OldMax);     // 旧 1v1 观战仍最多 8
             if (d.TryGetValue("specnoq", out v)) SpecCfg.NoQueue = v == "1";
             if (d.TryGetValue("hostspec", out v)) HostSpec = v == "1";
             HostSpecCfg.On = HostSpec;
-            if (d.TryGetValue("dz", out v)) DzCfg.On = v != "0";     // §223.4 联机省流（主机的房间设置，默认开）
+            if (d.TryGetValue("dz", out v)) DzCfg.On = v != "0";     // 联机省流（主机的房间设置，默认开）
             if (d.TryGetValue("bridgeup", out v)) BridgeUp = v != "0";
             if (d.TryGetValue("bridgeupms", out v) && int.TryParse(v, out n) && n >= 0 && n <= 2000) BridgeUpMs = n;
             SyncMeshPrefs();     // 多人房桥接自动择优（MpMesh / BridgeUp）和旧 1v1 共用 bridgeup / bridgeupms
@@ -187,11 +187,11 @@ namespace ForNet
               .Append("maxspec=").Append(MaxSpec).Append('\n').Append("specnoq=").Append(SpecCfg.NoQueue ? 1 : 0).Append('\n')
               .Append("hostspec=").Append(HostSpec ? 1 : 0).Append('\n')
               .Append("dz=").Append(DzCfg.On ? 1 : 0).Append('\n')
-              .Append("bridgeset=1\n")     // §136 这一版起 steam= 是认真的（见构造函数）
+              .Append("bridgeset=1\n")     // 这一版起桥接平台= 是认真的（见构造函数）
               .Append("server=").Append(Server.Replace("\n", " ")).Append('\n')
               .Append("secret=").Append(Secret.Replace("\n", " ")).Append('\n')
               .Append("ailevel=").Append(AiLevel).Append('\n');
-            if (!NetBind.V6) sb.Append("ipv6=0\n");     // §280 只在关的时候写（默认开，不多一行）
+            if (!NetBind.V6) sb.Append("ipv6=0\n");     // 只在关的时候写（默认开，不多一行）
             if (!BridgeUp) sb.Append("bridgeup=0\n");
             if (BridgeUpMs != 150) sb.Append("bridgeupms=").Append(BridgeUpMs).Append('\n');
             AiLoad.SaveCfg(sb);     // F5：AI 装备的行由游戏适配写（顺序和以前一样）
@@ -210,9 +210,9 @@ namespace ForNet
             return ep == null || ep.AddressFamily != AddressFamily.InterNetwork ? null : ep;
         }
 
-        // §280 输入 IP 直连 / 多人加入 / 观战输入地址：IPv4 和 IPv6 都认。
-        //   1.2.3.4、1.2.3.4:27015、[2001:db8::1]:27015、[2001:db8::1]、2001:db8::1（裸 IPv6 不带端口：多个冒号就不拆端口）、
-        //   域名[:端口]（先找 IPv4，没有再用 IPv6）。IPv4 映射成 IPv6 的（::ffff:1.2.3.4）还原成 IPv4
+        // 输入 IP 直连 / 多人加入 / 观战输入地址：IPv4 和 IPv6 都认。
+        // 1.2.3.4、1.2.3.4:27015、[2001:db8::1]:27015、[2001:db8::1]、2001:db8::1（裸 IPv6 不带端口：多个冒号就不拆端口）、
+        // 域名[:端口]（先找 IPv4，没有再用 IPv6）。IPv4 映射成 IPv6 的（::ffff:1.2.3.4）还原成 IPv4
         public static IPEndPoint ParseDirect(string text, int defPort)
         {
             string host;
@@ -234,7 +234,7 @@ namespace ForNet
             return new IPEndPoint(NetBind.Norm(ip), port);
         }
 
-        // §327 大厅服务器地址："IP[:端口]"、"[v6]:端口"、裸 IPv6、域名[:端口]（A 和 AAAA 都要）、localhost。
+        // 大厅服务器地址："IP[:端口]"、"[v6]:端口"、裸 IPv6、域名[:端口]（A 和 AAAA 都要）、localhost。
         // 返回最多两个端点：先 IPv4 再 IPv6（先用哪个由 LobbyServer.ResolveAll 定）；IPv6 关了（NetBind.V6 = false）只留 IPv4
         public static List<IPEndPoint> ParseServer(string text, int defPort)
         {
@@ -316,7 +316,7 @@ namespace ForNet
             return ip.AddressFamily == AddressFamily.InterNetwork ? host.Split('.').Length == 4 : host.Split(':').Length >= 3;
         }
 
-        // §280 两个 IPv6 地址前 64 位一样（同一个网段：Windows 的临时地址和固定地址就是这样）
+        // 两个 IPv6 地址前 64 位一样（同一个网段：Windows 的临时地址和固定地址就是这样）
         public static bool SameV6Prefix(IPAddress a, IPAddress b)
         {
             if (a == null || b == null || a.AddressFamily != AddressFamily.InterNetworkV6 || b.AddressFamily != AddressFamily.InterNetworkV6) return false;
@@ -327,7 +327,7 @@ namespace ForNet
             return true;
         }
 
-        // §280 本机发往公网 IPv6 时系统会用的源地址（朋友"输入 IP 直连"要填的就是它：主机回包也从这个地址出去）。
+        // 本机发往公网 IPv6 时系统会用的源地址（朋友"输入 IP 直连"要填的就是它：主机回包也从这个地址出去）。
         // 只问路由、不发包；没有公网 IPv6 返回 null
         public static IPAddress OutboundV6()
         {
@@ -351,7 +351,7 @@ namespace ForNet
             return (b[0] & 0xE0) == 0x20 && !(b[0] == 0x20 && b[1] == 0x01 && b[2] == 0x0d && b[3] == 0xb8);
         }
 
-        // "steam:76561198…" 或 17 位数字 → SteamID64；否则 0
+        // "桥接平台:<17 位数字>" 或 17 位数字 → 平台账号 ID；否则 0
         public static ulong BridgeId(string s)
         {
             s = (s ?? "").Trim();
@@ -390,9 +390,9 @@ namespace ForNet
         }
     }
 
-    // §130 非 Steam 方式（服务器大厅 / 输入 IP 直连 / 局域网）的连接诊断：net\net_conn.log，仿 §125 的 steam_conn.log。
+    // 非桥接平台方式（服务器大厅 / 输入 IP 直连 / 局域网）的连接诊断：net\net_conn.log，仿 的 steam_conn.log。
     // 一行一个事件（带毫秒时间），只在事件发生时写，不每帧写；游戏里的联机程序每个进程第一次 Start 时把上一份改名成 net_conn.prev.log。
-    // IP 一律经 Ip() 脱敏：只留前两段 + 本进程随机盐的短哈希（同一份日志里看得出是不是同一个地址，盐不落盘）。写失败吞掉
+    // IP 一律经 Ip 脱敏：只留前两段 + 本进程随机盐的短哈希（同一份日志里看得出是不是同一个地址，盐不落盘）。写失败吞掉
     static class NetLog
     {
         static string path;
@@ -451,7 +451,7 @@ namespace ForNet
             var tag = (h & 0xffff).ToString("x4");
             if (a.AddressFamily != AddressFamily.InterNetwork)
             {
-                // §280 IPv6：只留前两组 + 短哈希；种类按前缀分
+                // IPv6：只留前两组 + 短哈希；种类按前缀分
                 var b6 = a.GetAddressBytes();
                 string k6 = IPAddress.IsLoopback(a) ? "回环" : a.IsIPv6LinkLocal ? "链路本地" : (b6[0] & 0xFE) == 0xFC ? "内网" : Addr.IsGlobalV6(a) ? "公网" : "其他";
                 var g = s.Split('%')[0].Split(':');
@@ -576,7 +576,7 @@ namespace ForNet
         // 线程池线程默认没进 COM 套间：进多线程套间（已经进过返回 S_FALSE / RPC_E_CHANGED_MODE，都能用）
         static unsafe IntPtr Collection()
         {
-            CoInitializeEx(IntPtr.Zero, 0 /* COINIT_MULTITHREADED */);
+            CoInitializeEx(IntPtr.Zero, 0 /* COINIT_ */);
             IntPtr nat, maps = IntPtr.Zero;
             if (CoCreateInstance(ClsidNat, IntPtr.Zero, 1 /* CLSCTX_INPROC_SERVER */, IidNat, out nat) < 0 || nat == IntPtr.Zero) return IntPtr.Zero;
             try
@@ -731,11 +731,11 @@ namespace ForNet
 #endif
     }
 
-    // ---- §174 拉黑（HANDOVER §174；举报 0.34 已删）
+    // ---- 拉黑（举报 0.34 已删）
     // 标识：uid = 本机第一次运行时随机生成的安装号（net\uid.txt，12 位十六进制）。握手和每个状态包只带 uid=（0.34 评审：以前还带 sh=，
-    // SteamID 空间只有 2^31 量级、固定前缀 SHA-256 几分钟就能穷举，等于明文，所以**不再上网**）。
-    // sh = SteamID 的哈希，只在本机用（黑名单 / 最近一起玩过），而且用本机安装号当盐：别的机器拿到文件也反推不出；
-    // 它只来自 Steam 连接上验过的对方 SteamID（NoteOpp），不来自包里自报的字段
+    // 平台账号 ID空间只有 2^31 量级、固定前缀 SHA-256 几分钟就能穷举，等于明文，所以**不再上网**）。
+    // sh = 平台账号 ID的哈希，只在本机用（黑名单 / 最近一起玩过），而且用本机安装号当盐：别的机器拿到文件也反推不出；
+    // 它只来自 桥接连接上验过的对方平台账号 ID（NoteOpp），不来自包里自报的字段
     static class Ident
     {
         public static string Uid = "";
@@ -862,7 +862,7 @@ namespace ForNet
     // 一个对手（当前 / 最近）：主程序每轮看连着的会话记下来，面板的拉黑用
     class Opp
     {
-        public string Uid = "", Sh = "", Nick = "", Mode = "", Room = "", Mt = "", Ver = "", Rk = "";     // 0.34：不再记 SteamID 明文 / IP（Steam 验过的 SteamID 算成 Sh）
+        public string Uid = "", Sh = "", Nick = "", Mode = "", Room = "", Mt = "", Ver = "", Rk = "";     // 0.34：不再记平台账号 ID明文 / IP（桥接平台验过的平台账号 ID算成 Sh）
         public DateTime First, Last;
         public bool Same(Opp o)
         {
@@ -882,7 +882,7 @@ namespace ForNet
 
     // 黑名单：net\blacklist.txt，一行一个（uid= sh= nm= mode= at=，Tab 分开）。启动读一次，改了写一次；
     // 收包时查的是内存里的集合（每个包两次哈希表查找）。
-    // 0.34（TASK_0.34 §2.3）：不再存明文 SteamID（sid=）和 IP（ip=）。旧文件里的 sid= 加载时算成 sh=（SteamID 的哈希），ip= 丢掉，
+    // 0.34：不再存明文平台账号 ID（sid=）和 IP（ip=）。旧文件里的 sid= 加载时算成 sh=（平台账号 ID的哈希），ip= 丢掉，
     // 迁移过就重写一次文件。代价：对方什么标识都没报（旧版客户端）时拦不住，以前靠 IP 兜底的那几条也没了。
     static class Blacklist
     {
@@ -912,7 +912,7 @@ namespace ForNet
                     {
                         case "uid": e.Uid = v; break;
                         case "sh": e.Sh = v; break;
-                        case "sid": if (v.Length > 0) { if (e.Sh.Length == 0) e.Sh = Ident.BridgeHash(v); migrated = true; } break;     // 旧文件：明文 SteamID → 哈希
+                        case "sid": if (v.Length > 0) { if (e.Sh.Length == 0) e.Sh = Ident.BridgeHash(v); migrated = true; } break;     // 旧文件：明文平台账号 ID → 哈希
                         case "ip": if (v.Length > 0) migrated = true; break;     // 旧文件：IP 丢掉
                         case "nm": e.Nick = v; break;
                         case "mode": e.Mode = v; break;
@@ -940,7 +940,7 @@ namespace ForNet
         static void Save()
         {
             if (file == null) return;
-            var sb = new System.Text.StringBuilder("# " + GameInfo.ModName + " blacklist (HANDOVER 174 / 250.3): edit it in the in-game panel. Only hashed ids are kept.\n");
+            var sb = new System.Text.StringBuilder("# " + GameInfo.ModName + " blacklist: edit it in the in-game panel. Only hashed ids are kept.\n");
             foreach (var e in list)
                 sb.Append("uid=").Append(e.Uid).Append("\tsh=").Append(e.Sh)
                   .Append("\tnm=").Append(e.Nick.Replace("\t", " ").Replace("\r", " ").Replace("\n", " ")).Append("\tmode=").Append(e.Mode)
@@ -1008,10 +1008,10 @@ namespace ForNet
         public static string DenyBody { get { return WireTag.P + "DENY\n"; } }
     }
 
-    // 0.34 最近一起玩过的人（TASK_0.34 最终方案 2 / §3.1）：net\history.txt，本地、不上传。一行一条（Tab 分开）：
-    //   bh=<对方主机标记 = 对方安装号的哈希> sh=<对方 Steam 哈希> nm=<昵称> at=<unix> src=<lan|server|steam>
+    // 0.34 最近一起玩过的人（最终方案 2 /）：net\history.txt，本地、不上传。一行一条（Tab 分开）：
+    // bh=<对方主机标记 = 对方安装号的哈希> sh=<对方桥接平台哈希> nm=<昵称> at=<unix> src=<lan|server|桥接平台>
     // 只记真正连上并连着超过 45 秒 / 开打了的对手（Program.Tick）；最多 50 条，30 天后丢；面板"清除本地联机记录"删整个文件。
-    // 匹配：服务器房间列表第 10 列 / 局域网广播最后一段就是对方的 bh；Steam 好友按 BridgeHash 对 sh（不存 SteamID）。
+    // 匹配：服务器房间列表第 10 列 / 局域网广播最后一段就是对方的 bh；平台好友按 BridgeHash 对 sh（不存平台账号 ID）。
     static class History
     {
         public class Entry { public string Bh = "", Sh = "", Nick = "", Src = ""; public long At; }
@@ -1090,7 +1090,7 @@ namespace ForNet
         public static List<Entry> Snapshot() { lock (gate) return new List<Entry>(list); }
     }
 
-    // 下线标志（0.34 §2.4 L0/L1/L2、到期日）X3 整个删了（docs/EXTENSIONS.md：插件开关取代；基底不再有"不经同意"的例外）。只剩本地安全模式 Cfg.Safe。
+    // 下线标志（0.34 L0/L1/L2、到期日）X3 整个删了（：插件开关取代；基底不再有"不经同意"的例外）。只剩本地安全模式 Cfg.Safe。
 
-    // 举报（§174 Reporter）0.34 整个删了：TASK_0.34 §2.3 / HANDOVER §250.3。玩家有问题直接联系作者。
+    // 举报（Reporter）0.34 整个删了： / 。玩家有问题直接联系作者。
 }

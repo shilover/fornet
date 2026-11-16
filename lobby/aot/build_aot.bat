@@ -1,8 +1,8 @@
 @echo off
 rem NativeAOT build of the lobby program (same source as build.bat). ASCII only.
-rem   out\release\fornet_lobby.dll              release DLL: packages / public export, loaded by the game's Lua
-rem   out\dev\fornet_lobby.dll                  dev DLL (same code today; a game's deploy script copies this one)
-rem   out\headless\FornetLobby-headless.exe     same code as a windowless exe, not shipped: for tests
+rem out\release\fornet_lobby.dll release DLL: packages / public export, loaded by the game's Lua
+rem out\dev\fornet_lobby.dll dev DLL (same code today; a game's deploy script copies this one)
+rem out\headless\FornetLobby-headless.exe same code as a windowless exe, not shipped: for tests
 rem Needs .NET 8 SDK (dotnet on PATH, or set FORNET_DOTNET) + MSVC build tools (link.exe, Windows SDK).
 rem Game C# (FORNET_GAME_CS, see ..\build.bat) is compiled in the same way as the exe.
 rem ILCompiler finds MSVC with vswhere.exe, so the VS Installer folder goes on PATH.

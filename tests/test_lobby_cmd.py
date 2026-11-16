@@ -1,11 +1,11 @@
-# fornet 仓库自带测试（11-13 测试分家，HANDOVER §274）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_lobby_cmd.py
+# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_lobby_cmd.py
 # 联机窗口的命令通道（net-ui）：两个后台 exe 实例，靠 cmd.txt 让 A 建房、B 加入，查 lobby.txt / session.txt / state_remote.txt。
 # 不开游戏；两个实例各用自己的 --dir，互不影响。
-#   python -I test_lobby_cmd.py <FornetLobby.exe> <工作目录> [模式 direct|lan] [端口]
+# python -I test_lobby_cmd.py <FornetLobby.exe> <工作目录> [模式 direct|lan] [端口]
 # 默认 direct = 服务器大厅里的"输入 IP 直连"（v0.20.3 起原来的广域网），端口 27115；大厅地址填一个不通的（127.0.0.1:9），
 # 顺带测"服务器连不上也能直连"，也不会登记到公共大厅。lan 会占 27015 并广播几秒。
 import os, sys, time, subprocess, threading
-os.environ.setdefault("FORNET_LOOPBACK", "1")   # §125 联机程序只绑 127.0.0.1，测试时防火墙不弹（子进程继承）
+os.environ.setdefault("FORNET_LOOPBACK", "1")   # 联机程序只绑 127.0.0.1，测试时防火墙不弹（子进程继承）
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -121,11 +121,11 @@ try:
     check("转给游戏的状态里也带 nm", ra.get("nm") == "乙方", "nm=" + ra.get("nm", "?"))
     recent = kv(os.path.join(B, "netcfg.txt")).get("recent_" + mode, "")
     check("加入过的地址记进最近列表", recent != "", recent)
-    # §125 回环下局域网发现收得到 A 的房间，地址也是 127.0.0.1，列表按目标去重后"最近"那条并进房间那条：认目标在列表里
+    # 回环下局域网发现收得到 A 的房间，地址也是 127.0.0.1，列表按目标去重后"最近"那条并进房间那条：认目标在列表里
     check("lobby.txt 列出最近", any(lb.get("t%d" % i, "").startswith("recent|") or (mode == "lan" and lb.get("t%d" % i, "").endswith("|" + target))
                                 for i in range(1, int(lb.get("n", 0)) + 1)),
           str({k: v for k, v in lb.items() if k == "n" or k[:1] == "t"}))
-    # 等联机程序回 ack 再查（以前固定等 0.6 / 0.8 秒，机器忙时偶发赶不上，HANDOVER §45）
+    # 等联机程序回 ack 再查（以前固定等 0.6 / 0.8 秒，机器忙时偶发赶不上）
     def wait_ack(d, ack, sec=3.0):
         t0 = time.time()
         while time.time() - t0 < sec:
@@ -135,7 +135,7 @@ try:
             time.sleep(0.1)
         return kv(os.path.join(d, "lobby.txt"))
 
-    write(os.path.join(B, "cmd.txt"), "id=3\ncmd=mode\nmode=ai\n")     # §110.9 起 Steam 两种方式默认不列（会被当成 lan），换一个一直都有的
+    write(os.path.join(B, "cmd.txt"), "id=3\ncmd=mode\nmode=ai\n")     # 起桥接平台两种方式默认不列（会被当成 lan），换一个一直都有的
     lb = wait_ack(B, "3")
     check("联机中不能换方式", lb.get("mode") == mode and "断开" in lb.get("err", ""), "mode=%s err=%s" % (lb.get("mode"), lb.get("err")))
     write(os.path.join(B, "cmd.txt"), "id=4\ncmd=stop\n")

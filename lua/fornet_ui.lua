@@ -1,9 +1,9 @@
--- fornet_ui.lua —— fornet（4net）UE4SS 网络核：面板底座第一块（docs/EXTENSIONS.md §10.4 F3b；docs/FORNET_SPLIT.md）。
+-- fornet_ui.lua —— fornet（4net）UE4SS 网络核：面板底座第一块（F3b）。
 -- 从游戏模组的 main.lua 原样搬出来的 net-ui 核心段：联机程序拉起（DLL / exe）、lobby.txt / cmd.txt 文件协议、连接方式 / 线路名、
 -- 面板的节流读取、等回话（BUSY）。不碰任何游戏对象、不认识任何全局：全部经 ctx 给。
 -- 用法：local UI = require("fornet_ui")({ out=, now=, ROOT=, NET_DIR=, INST=, T=, fileWrite=, fileReadKV=, PIPE=, consent= })
---   UI.NETUI / UI.netuiRead / UI.netuiCmd / UI.netuiEnsure / UI.netuiLaunch / UI.netuiStarting / UI.netuiMode /
---   UI.netModeName / UI.netRouteName / UI.clipText / UI.lobbyAlive / UI.NETUI_QUICK / UI.NETUI_PER_PAGE / UI.GUI_PER_PAGE
+-- UI.NETUI / UI.netuiRead / UI.netuiCmd / UI.netuiEnsure / UI.netuiLaunch / UI.netuiStarting / UI.netuiMode /
+-- UI.netModeName / UI.netRouteName / UI.clipText / UI.lobbyAlive / UI.NETUI_QUICK / UI.NETUI_PER_PAGE / UI.GUI_PER_PAGE
 return function(ctx)
 local out, now, ROOT, NET_DIR, INST, T = ctx.out, ctx.now, ctx.ROOT, ctx.NET_DIR, ctx.INST, ctx.T
 local fileWrite, fileReadKV, PIPE = ctx.fileWrite, ctx.fileReadKV, ctx.PIPE
@@ -12,12 +12,12 @@ local LOBBY_EXE = ctx.LOBBY_EXE or "FornetLobby.exe"     -- 退路 exe 的文件
 local U = {}
 -- 画面就是上面的 HUD（最多 9 行）。内容来自联机窗口每 0.5 秒写的 net/lobby.txt；操作写 net/cmd.txt（id 每次不同，窗口只执行一次）。
 -- 联机窗口没开着（lobby.txt 的 alive 超过 3 秒没更新）时自动以后台模式启动它（<退路 exe> --bg）：
--- v0.18.5 起模组一加载就拉起（用户定：保留联机程序，但要做到完全不用管），打开面板时发现它没响应再拉一次。
+-- v0.18.5 起模组一加载就拉起，打开面板时发现它没响应再拉一次。
 -- 自动拉起最多连续 NETUI_AUTO_TRIES 次，之后只在面板上按 End 手动重试。
--- 启动计时一律用 os.time()：now() 在玩家生成前是 os.time、之后换成游戏时间，两种时基相减会算出负数（永远"正在启动"）
+-- 启动计时一律用 os.time：now 在玩家生成前是 os.time、之后换成游戏时间，两种时基相减会算出负数（永远"正在启动"）
 local NETUI = { open = false, sel = 1, cmdN = 0, lobby = nil, readAt = 0.0, launchAt = nil, tries = 0, items = {} }
 local NETUI_AUTO_TRIES = 3
--- §91 发出后要等联机程序回话的命令（copy / show / refresh 不等：copy 自己闪提示，另两个面板上看不出变化）
+-- 发出后要等联机程序回话的命令（copy / show / refresh 不等：copy 自己闪提示，另两个面板上看不出变化）
 NETUI.BUSY_SEC = 5.0
 NETUI.BUSY = {
     host = { "正在创建房间", "CREATING THE ROOM" }, ai = { "正在开始 AI 对战", "STARTING THE AI BATTLE" },
@@ -31,16 +31,16 @@ end
 local LOBBY_FILE, CMD_FILE = NET_DIR .. "/lobby.txt", NET_DIR .. "/cmd.txt"
 -- v0.20.2：虚拟局域网并进局域网（局域网顺带找 Tailscale 节点、显示虚拟网卡地址；联机程序把旧的 vlan 当 lan）
 -- v0.20.3：广域网并进服务器大厅（"输入 IP 直连…"；联机程序把旧的 wan 当 server）
-local NET_MODES = { "server", "lan", "ai" }   -- 顺序同联机程序的 Modes.All（End 按这个顺序换）；§75 本地 AI 在局域网后面；Steam 大厅 v0.34 删（TASK_0.34 §2.1）；Steam 好友 v0.34 并进"最近"页，不再是独立方式（§3.1）
--- §110 武林盟主（ranked）排在服务器大厅后面。只有报 modes= 的新版联机程序才有它，所以不进上面那个"旧版联机程序"的兜底列表；
+local NET_MODES = { "server", "lan", "ai" }   -- 顺序同联机程序的 Modes.All（End 按这个顺序换）； 本地 AI 在局域网后面；平台大厅 v0.34 删；平台好友 v0.34 并进"最近"页，不再是独立方式
+-- 排位（ranked）排在服务器大厅后面。只有报 modes= 的新版联机程序才有它，所以不进上面那个"旧版联机程序"的兜底列表；
 -- 鼠标面板的标签页按这个全集建（联机程序没报的方式藏起，见 guiTick）
--- F4c-2：桥接传输（扩展包装进游戏的外部联机服务，例如 Steam）的显示名由联机程序从桥接 DLL 握手拿到（lobby.txt bridgesvc=）；文案里写 {SVC}
--- §279（用户 11-13："直接用桥接就好，因为插件上写的是桥接，你中英文混了"）：给玩家看的文字一律写"桥接"，不写服务名（Steam 等）；
+-- F4c-2：桥接传输（扩展包装进游戏的外部联机服务，例如桥接平台）的显示名由联机程序从桥接 DLL 握手拿到（lobby.txt bridgesvc=）；文案里写 {SVC}
+-- 给玩家看的文字一律写"桥接"，不写服务名（桥接平台等）；
 -- 真实服务名（lobby.txt bridgesvc=）只进日志和扩展包自己的插件页
 function NETUI.bridgeSvc() return T("桥接", "Bridge") end
 function NETUI.svc(s) return (tostring(s):gsub("{SVC}", NETUI.bridgeSvc())) end
--- 11-15 用户："桥接好友……能跟之前一样显示成一个单独分类么，steam 插件的就是 steam 好友"：好友标签 / 好友页按插件报的服务名叫（bridgesvc=Steam → Steam 好友），
--- 插件没报名字时叫"桥接好友"。其余文案照 §279 写"桥接"
+-- 11-15 用户："桥接好友……能跟之前一样显示成一个单独分类么，桥接平台插件的就是桥接平台好友"：好友标签 / 好友页按插件报的服务名叫（bridgesvc=桥接平台 → 平台好友），
+-- 插件没报名字时叫"桥接好友"。其余文案照 写"桥接"
 function NETUI.friendsName()
     local svc = NETUI.lobby and NETUI.lobby.bridgesvc or ""
     local C = consent()
@@ -50,15 +50,15 @@ function NETUI.friendsName()
 end
 -- 好友标签能不能点：桥在、没在联机（联机中没有标签栏，和换连接方式一样）
 function NETUI.friendsTab(lb) return NETUI.hasBridge() and ((lb or NETUI.lobby or {}).role or "none") == "none" end
-NETUI.TABS = { "server", "lan", "friends", "ai" }     -- 11-15 friends = 桥接好友标签（不是连接方式，点了只换到 bfriends 页；装了桥接插件才显示，名字按插件报的服务名，如"Steam 好友"）；0.34：没有 Steam 好友标签（mode=steam 只是内部传输，从"最近"页进）；F4b：排位等注册进来的方式经 U.addMode 插在 after 之后
--- F4b：方式注册表（名字 / 标签 / 底下走不走服务器大厅 / 没房间时的话 / 开房按钮 / 主页行 / 能不能当 AI 等人房间）。基底只有 steam / server / lan / ai；
+NETUI.TABS = { "server", "lan", "friends", "ai" }     -- 11-15 friends = 桥接好友标签（不是连接方式，点了只换到 bfriends 页；装了桥接插件才显示，名字按插件报的服务名，如"平台好友"）；0.34：没有平台好友标签（mode=桥接平台只是内部传输，从"最近"页进）；F4b：排位等注册进来的方式经 U.addMode 插在 after 之后
+-- F4b：方式注册表（名字 / 标签 / 底下走不走服务器大厅 / 没房间时的话 / 开房按钮 / 主页行 / 能不能当 AI 等人房间）。基底只有桥接平台 / server / lan / ai；
 -- 排位等由 U.addMode 加进来（game_ranked.lua）
 local MODE_NAME = { bridge = { "{SVC}好友", "{SVC} FRIENDS" }, server = { "服务器大厅", "LOBBY SERVER" }, ai = { "本地 AI", "LOCAL AI" }, lan = { "局域网", "LAN" } }
 local VIA_SERVER = { server = true }
 local NOROOMS = { bridge = { "（没有好友在开房）", "(NO FRIEND IS HOSTING)" }, server = { "（大厅里没有房间）", "(NO ROOMS ON THE SERVER)" } }
 local GUI_TAB = { friends = { "{SVC}好友", "{SVC}" }, bridge = { "{SVC}好友", "{SVC}" }, lan = { "局域网", "LAN" }, server = { "服务器大厅", "SERVER" }, ai = { "本地 AI", "LOCAL AI" } }
 local MODE_HOST_LABEL, MODE_ROWS, MODE_NO_AIROOM, MODE_INROOM = {}, {}, { ai = true }, {}
--- §98 实际能用的方式以联机程序报的 lobby.txt modes= 为准（发布版不带 Steam 方式）；旧版联机程序没这一项时用 NET_MODES
+-- 实际能用的方式以联机程序报的 lobby.txt modes= 为准（发布版不带桥接平台方式）；旧版联机程序没这一项时用 NET_MODES
 NETUI.modes = function()
     local s = NETUI.lobby and NETUI.lobby.modes or ""
     if s == "" then return NET_MODES end
@@ -73,15 +73,15 @@ NETUI.hasMode = function(m)
     for _, x in ipairs(NETUI.modes()) do if x == m then return true end end
     return false
 end
--- §278：装了桥接扩展包、游戏里的桥在（联机程序报 bridgeav=1，或已经连上 bridge=ok）。0.34 起 modes= 不列 bridge，
--- 所以别拿 hasMode("bridge") 判断桥在不在（以前那三行 Steam 设置因此永远不显示）
+-- 装了桥接扩展包、游戏里的桥在（联机程序报 bridgeav=1，或已经连上 bridge=ok）。0.34 起 modes= 不列 bridge，
+-- 所以别拿 hasMode("bridge") 判断桥在不在（以前那三行桥接平台设置因此永远不显示）
 NETUI.hasBridge = function()
     local lb = NETUI.lobby or {}
     return lb.bridgeav == "1" or lb.bridge == "ok" or NETUI.hasMode("bridge")
 end
--- §110 武林盟主（ranked）底下走的就是服务器大厅那一套：房间列表、建房、房间号、复制、线路都和 server 一样（只是没有 IP 直连）
+-- 排位（ranked）底下走的就是服务器大厅那一套：房间列表、建房、房间号、复制、线路都和 server 一样（只是没有 IP 直连）
 NETUI.viaServer = function(m) return VIA_SERVER[m] == true end
--- v0.19.1：房间多了放到单独的"房间列表"页（用户 2026-11-04："房间多了这个列表会不会很难操作"）。
+-- v0.19.1：房间多了放到单独的"房间列表"页。
 -- 以前主页最多列 3 个、联机程序最多给 8 个，多出来的根本看不到。现在：主页只放剪贴板 / 最近（快捷加入，最多 NETUI_QUICK 个）
 -- 和一行"房间列表（N 个）…"；房间列表页每页 NETUI_PER_PAGE 个，在页首 / 页尾再往上 / 往下自动翻页
 local NETUI_QUICK = 2
@@ -97,7 +97,7 @@ end
 local function netRouteName(r)
     if r == "direct" then return T("直连", "DIRECT")
     elseif r == "relay" then return T("服务器中转", "RELAY")
-    -- §135 武林盟主的对局走 Steam：Steam 已连上 / 正在经 Steam 连 / 还在向大厅服务器报到
+    -- 排位的对局走桥接平台：桥接平台已连上 / 正在经桥接平台连 / 还在向大厅服务器报到
     elseif r == "bridge" then return NETUI.bridgeSvc()
     elseif r == "bridgewait" then return T("正在经" .. NETUI.bridgeSvc() .. "连接", "CONNECTING VIA " .. NETUI.bridgeSvc():upper())
     elseif r == "join" then return T("向大厅服务器报到", "JOINING VIA LOBBY") end
@@ -119,17 +119,17 @@ local function lobbyAlive(lb)
 end
 
 local function netuiRead(tn, force)
-    -- v0.24.0：now() 在玩家控制器就绪前退回 os.time()（约 17 亿秒），之后才是游戏秒数；那时定下的 readAt 会让这里永远不再读文件
+    -- v0.24.0：now 在玩家控制器就绪前退回 os.time（约 17 亿秒），之后才是游戏秒数；那时定下的 readAt 会让这里永远不再读文件
     -- （对手血条一直拿不到 peername）。下次读的时间比现在晚 5 秒以上 = 时间基准变了，立即重读
     if not force and tn < NETUI.readAt and NETUI.readAt - tn < 5 then return NETUI.lobby end
     NETUI.readAt = tn + (NETUI.busy and 0.05 or NETUI.open and 0.25 or 1.0)
-    if NETUI.busy and PIPE then PIPE.blobAt = 0 end      -- §91 等命令回话：管道这次不按 BLOB_SEC 节流，马上问
-    -- v0.18.6：联机程序每 0.5 秒整个替换一次 lobby.txt，正好碰上时读不到 → 以前面板会闪一下红字"没响应"（用户 18:29 反馈）。
+    if NETUI.busy and PIPE then PIPE.blobAt = 0 end      -- 等命令回话：管道这次不按 BLOB_SEC 节流，马上问
+    -- v0.18.6：联机程序每 0.5 秒整个替换一次 lobby.txt，正好碰上时读不到 → 以前面板会闪一下红字"没响应"。
     -- 读失败就沿用上一次的内容；程序真没了的话，上一次的 alive 时间戳 3 秒后自然过期
     local kv = fileReadKV(LOBBY_FILE)
     if kv or not NETUI.lobby then NETUI.lobby = kv end
     if U.onLobby then U.onLobby(NETUI.lobby) end
-    -- §223.4 联机省流开 / 关和原因变了记一行（联机程序不进面板状态行，报在 lobby.txt dzwhy=）
+    -- 联机省流开 / 关和原因变了记一行（联机程序不进面板状态行，报在 lobby.txt dzwhy=）
     local why = kv and kv.dzwhy
     if why and why ~= "" and why ~= NETUI.dzWhy then
         NETUI.dzWhy = why
@@ -148,7 +148,7 @@ local function netuiCmd(cmd, extra)
     local ok = fileWrite(CMD_FILE, string.format("id=%s\ncmd=%s\n%s", id, cmd, extra or ""))
     out("联机面板 → 联机窗口：%s %s（id=%s，%s）", cmd, ((extra or ""):gsub("\n", " ")), id, ok and "已写" or "写失败")
     NETUI.readAt = 0.0
-    -- §91 等联机程序回话（lobby.txt 的 ack = 这条命令的 id）：状态行显示"正在…"，按钮变灰点不了，5 秒没回话报错
+    -- 等联机程序回话（lobby.txt 的 ack = 这条命令的 id）：状态行显示"正在…"，按钮变灰点不了，5 秒没回话报错
     local w = ok and NETUI.BUSY[cmd]
     if w then
         if cmd == "host" and (NETUI.lobby or {}).mode == "ai" then w = NETUI.BUSY.ai end
@@ -158,11 +158,11 @@ end
 
 -- 以后台模式启动联机窗口。v0.23.0 起 exe 叫 <退路 exe>（以前是中文名的 exe：os.execute 走 ANSI 代码页，中文名传不过去，
 -- 只能让 cmd 展开 旧名字*.exe 通配符；那样新旧两个 exe 都在时会都被拉起来，所以改成英文名、按全名启动）
--- §122 先试 fornet_lobby.dll（F5 改名，以前 fornet_lobby.dll）：联机程序编成原生 DLL、在游戏进程里跑（不再多一个后台进程）。package.loadlib 拿它导出的
+-- 先试 fornet_lobby.dll：联机程序编成原生 DLL、在游戏进程里跑（不再多一个后台进程）。package.loadlib 拿它导出的
 -- fornet_lobby_start 调一次：它只起一个后台线程（已经在跑就什么也不做），不碰 lua_State。没有这个 DLL / 载不进来 /
 -- 连着 2 次拉起后还没响应，退回启动 <退路 exe>（两者用同一个 net 目录的单实例锁，不会同时跑两份）
 local function netuiLaunchDll()
-    if NETUI.dllOff then return false end     -- §153 第二份也用 DLL（DLL 自己判断用 net2）
+    if NETUI.dllOff then return false end     -- 第二份也用 DLL（DLL 自己判断用 net2）
     local dll = (ROOT .. "/fornet_lobby.dll"):gsub("/", "\\")
     local f = io.open(dll, "rb")
     if not f then NETUI.dllOff = true; return false end
@@ -200,7 +200,7 @@ local function netuiLaunch()
         return
     end
     local dir = ROOT:gsub("/", "\\")
-    -- §312：发布包 / deploy 早就不带 <退路 exe> 了；文件不在时 "cmd /c start" 会弹"找不到文件"框，os.execute 一直等 → 游戏线程卡死
+    -- 发布包 / deploy 早就不带 <退路 exe> 了；文件不在时 "cmd /c start" 会弹"找不到文件"框，os.execute 一直等 → 游戏线程卡死
     local fe = io.open(dir .. "\\" .. LOBBY_EXE, "rb")
     if not fe then
         NETUI.launchErr = "no " .. LOBBY_EXE
@@ -209,7 +209,7 @@ local function netuiLaunch()
     end
     fe:close()
     local cmd = string.format('cmd /c start "" "%s\\%s" --bg', dir, LOBBY_EXE)
-    if INST.slot == 2 then cmd = cmd .. string.format(' --dir "%s"', NET_DIR:gsub("/", "\\")) end     -- §151
+    if INST.slot == 2 then cmd = cmd .. string.format(' --dir "%s"', NET_DIR:gsub("/", "\\")) end
     local ok, r = pcall(os.execute, cmd)
     NETUI.launchErr = (not ok) and tostring(r) or nil
     out("联机面板：启动联机窗口 %s -> %s %s", cmd, ok and "已执行" or "失败", tostring(r))
@@ -222,7 +222,7 @@ end
 
 -- 联机程序没响应就自动拉起（模组加载时、打开面板时）。10 秒内不重复拉；连续失败 NETUI_AUTO_TRIES 次后不再自动拉
 local function netuiEnsure(why, tn)
-    -- §312 实测（11-14 22:08 / 22:11）：多人房房主的联机程序忙时 lobby.txt 的 alive 落后 1.5–4 秒，这里按"没运行"重启，
+    -- 实测（11-14 22:08 / 22:11）：多人房房主的联机程序忙时 lobby.txt 的 alive 落后 1.5–4 秒，这里按"没运行"重启，
     -- 第 3 次退到 <退路 exe> → 游戏卡死。管道连着就是活着（真断了有 NETUI.watchPipe 管），不看 alive
     if (PIPE and PIPE.on) or lobbyAlive(netuiRead(tn, true)) then NETUI.tries = 0; NETUI.dllTries = 0; return end
     if NETUI.launchAt and os.time() - NETUI.launchAt < 10 then return end
@@ -232,7 +232,7 @@ local function netuiEnsure(why, tn)
     netuiLaunch()
 end
 
--- §99 管道断开（联机程序退出 / 崩了）4 秒后还没连回来就自动拉起，不等玩家打开面板。
+-- 管道断开（联机程序退出 / 崩了）4 秒后还没连回来就自动拉起，不等玩家打开面板。
 -- 2026-11-05 19:56 内测：联机窗口点 × 退出后 4 分多钟没有联机程序，直到玩家在面板上手动点"重新启动联机程序"。
 -- 每次断开算新的一轮（次数清零）；10 秒内不重复拉、连续 NETUI_AUTO_TRIES 次的限制照旧在 netuiEnsure 里
 function NETUI.watchPipe(tn)
@@ -253,8 +253,8 @@ end
 
 
 
--- ---- 文本按半角宽度折行 / 截断（原在 §129 UPnP 提示旁；CONSENT.wrap 也用）
--- 宽度 w 以内能放下的字节数，以及其中最后一个能折行的位置（优先 ，, ；之后，其次空格之后；太靠前的不算）
+-- ---- 文本按半角宽度折行 / 截断（原在 UPnP 提示旁；CONSENT.wrap 也用）
+-- 宽度 w 以内能放下的字节数，以及其中最后一个能折行的位置（优先 ， ；之后，其次空格之后；太靠前的不算）
 local function upnpFit(s, w)
     local x, last, punct, space = 0, 0, nil, nil
     for p, c in utf8.codes(s) do
@@ -274,7 +274,7 @@ end
 
 -- ============================================================ F3b-2：游戏内输入框 + 鼠标面板 GUI（从 main.lua 原样搬出）
 -- 两段互相引用（输入框用 GUI 表 / guiRoot，GUI 用 editBox / inputMode / WBL），一起搬。UMG 控件只经 UE4SS 的 StaticFindObject /
--- 控件库建，不碰游戏对象；屏幕文字 HUD / 颜色 / 游戏适配 G / 切图 MAPGO / 硬直 STG / 好友 FRIEND 等经 ctx 给，CONSENT 经 consent() 调用时取
+-- 控件库建，不碰游戏对象；屏幕文字 HUD / 颜色 / 游戏适配 G / 切图 MAPGO / 硬直 STG / 好友 FRIEND 等经 ctx 给，CONSENT 经 consent 调用时取
 local G, HUD, HUD_Y, umgColor, umgRoot = ctx.G, ctx.HUD, ctx.HUD_Y, ctx.umgColor, ctx.umgRoot
 local MAPGO, STG, FRIEND, ST, full, status = ctx.MAPGO, ctx.STG, ctx.FRIEND, ctx.ST, ctx.full, ctx.status
 local COL_GRAY, COL_LABEL, COL_ORANGE, COL_RED, COL_WHITE = ctx.COL_GRAY, ctx.COL_LABEL, ctx.COL_ORANGE, ctx.COL_RED, ctx.COL_WHITE
@@ -288,7 +288,7 @@ local getP1PC = ctx.getP1PC or function() return nil end
 -- 回车（UE4SS 键位，见文件末尾）用记下的内容提交；Esc 取消。切出窗口回来焦点会丢：丢焦点 0.3 秒内没等到回车就把焦点拿回来
 local WBL = "/Script/UMG.Default__WidgetBlueprintLibrary"
 
--- v0.29.3 输入框字色（用户 2026-11-07 截图：打字时字是浅灰、看不清）。SetForegroundColor 只改没焦点时的字色，
+-- v0.29.3 输入框字色。SetForegroundColor 只改没焦点时的字色，
 -- 打字时输入框有焦点，用的是 WidgetStyle.FocusedForegroundColor（引擎默认浅灰）→ 三种状态和 TextStyle 都写成深色。
 -- 要在输入框加进界面（建出 Slate 控件）之前写样式；之后再 SetForegroundColor 一次兜底
 local EB_DARK = { R = 0.05, G = 0.05, B = 0.05, A = 1.0 }
@@ -306,7 +306,7 @@ local function ebColor(eb)
     pcall(function() eb:SetForegroundColor(EB_DARK) end)
 end
 
--- v0.20.0 鼠标面板（用户 2026-11-04："mod 还是 TUI 用起来很不好用，能做成 GUI 么"，选了"游戏内鼠标面板"）。
+-- v0.20.0 鼠标面板。
 -- 面板开着时放出鼠标（bShowMouseCursor + SetInputMode_UIOnlyEx，Phantom Pact 的面板也是这么放鼠标的），
 -- 每行是真的 UMG Button，连接方式是一排标签页。UE4SS 的 Lua 绑不了按钮的 OnClicked 事件，所以每 33ms 查一次
 -- IsHovered / IsPressed：上一次按着、这次松开且鼠标还在上面 = 点了一下。键盘 PgUp/PgDn/End 照样能用。
@@ -314,7 +314,7 @@ end
 local GUI = { on = false, failed = false }
 
 -- v0.27.12 鼠标面板还是这张地图上建的那个（2026-11-05 19:05 崩溃：坐铃切图后按 Home，把旧地图的面板控件交给
--- SetInputMode_UIOnlyEx，引擎对失效控件 TakeWidget 崩了，HANDOVER §93）。换过地图就不碰 GUI.w，只丢掉引用，guiRoot 重建
+-- SetInputMode_UIOnlyEx，引擎对失效控件 TakeWidget 崩了）。换过地图就不碰 GUI.w，只丢掉引用，guiRoot 重建
 GUI.fresh = function()
     return GUI.w ~= nil and GUI.gen == ST.mapLoads and valid(GUI.w)
 end
@@ -354,7 +354,7 @@ local function inputMode(ui)
     local okP, pc = pcall(getP1PC)
     if not (okP and valid(pc)) then return end
     -- 鼠标面板开着：不在输入时也是 UIOnly（游戏收不到键盘鼠标，角色不动），并显示鼠标
-    -- v0.27.12 面板是旧地图的：先丢掉、这次按没有面板处理（只给游戏），下一轮 guiShow → guiRoot 重建后再放鼠标（§93）
+    -- v0.27.12 面板是旧地图的：先丢掉、这次按没有面板处理（只给游戏），下一轮 guiShow → guiRoot 重建后再放鼠标
     if GUI.on and not GUI.fresh() then out("鼠标面板：地图换过了，旧面板不用，重建"); GUI.drop() end
     local mouse = (NETUI.open and GUI.on) and true or false
     local ok, err = pcall(function()
@@ -363,7 +363,7 @@ local function inputMode(ui)
             if not (NETUI.box and valid(NETUI.box.eb)) then error("输入框没了") end
             lib:SetInputMode_UIOnlyEx(pc, NETUI.box.eb, 0, false); NETUI.box.eb:SetKeyboardFocus()
         elseif mouse then lib:SetInputMode_UIOnlyEx(pc, GUI.focusable and GUI.w or nil, 0, false)
-        elseif STG.locked then lib:SetInputMode_UIOnlyEx(pc, nil, 0, false)     -- §228 硬直关着输入：关面板也别开回
+        elseif STG.locked then lib:SetInputMode_UIOnlyEx(pc, nil, 0, false)     -- 硬直关着输入：关面板也别开回
         else lib:SetInputMode_GameOnly(pc, false) end
         pc.bShowMouseCursor = mouse
     end)
@@ -371,7 +371,7 @@ local function inputMode(ui)
     if not ok then out("!! 切换输入模式失败：%s", tostring(err)) end
 end
 
--- §228 硬直关输入：面板 / 输入框开着时不另外关；开回时按面板的状态来（先把 locked 放下再调 inputMode）
+-- 硬直关输入：面板 / 输入框开着时不另外关；开回时按面板的状态来（先把 locked 放下再调 inputMode）
 STG.uiBusy = function() return (NETUI.open and GUI.on) or NETUI.edit ~= nil end
 STG.restoreInput = function()
     if STG.uiBusy() then STG.locked = false; return end      -- 面板 / 输入框开着：它关的时候 inputMode 会开回游戏
@@ -445,11 +445,11 @@ local function netuiFlash(s, col)
     NETUI.flash = { text = s, till = os.time() + 3, col = col }
 end
 
--- §91 每帧（netuiRows）：联机程序回了这条命令（ack）→ 结束等待；超时 → 红字提示
+-- 每帧（netuiRows）：联机程序回了这条命令（ack）→ 结束等待；超时 → 红字提示
 function NETUI.busyStep(lb, tn)
     local b = NETUI.busy
     if not b then return end
-    if tn < b.at then b.at = tn end                  -- now() 的时间基准变了（见 netuiRead）
+    if tn < b.at then b.at = tn end                  -- now 的时间基准变了（见 netuiRead）
     if lb and lb.ack == b.id then
         NETUI.busy = nil
         out("联机面板：%s 已执行（等了 %d ms）", b.cmd, math.floor((tn - b.at) * 1000 + 0.5))
@@ -460,7 +460,7 @@ function NETUI.busyStep(lb, tn)
     end
 end
 
--- §117 房间列表的显示名（用户 2026-11-06）：联机程序给的"地图 Map_DengDingShanDao"换成游戏里的大区域名（game_places 里没有的照旧）；
+-- 房间列表的显示名：联机程序给的"地图 Map_DengDingShanDao"换成游戏里的大区域名（game_places 里没有的照旧）；
 -- 已满的房间把末尾的"已满"（长名字会被截掉看不到）挪到最前面做标记。排序（可加入的在前）在 netuiTargets 里
 local function parseTg(s)
     if not s or s == "" then return nil end
@@ -479,12 +479,12 @@ local function roomLabel(kind, label, tg)
     end)
     -- 11-15 用户："房间的 tag [旧版][淘汰][积分][对决] 要在房间名前面显示清楚"：最前面固定是玩法，再是 [服务器房]、[对局中] / [已满]，
     -- 再是人数（多人房）和分队，最后房间名。没有 tg（老版本联机程序开的）和 k = 1v1 的都是旧版 1v1
-    if kind == "nohost" then return label end     -- §123 在玩但没开房的好友：不是房间，不标玩法
-    local full = kind == "full" or kind == "watch"     -- §141 watch = 满了但能观战
+    if kind == "nohost" then return label end     -- 在玩但没开房的好友：不是房间，不标玩法
+    local full = kind == "full" or kind == "watch"     -- watch = 满了但能观战
     if full then label = label:gsub(T("  已满", "  full"), "", 1) end
-    if kind == "sroom" then label = "[" .. NETUI.bridgeSvc() .. T("房] ", "] ") .. label end     -- 0.34 房主开了"对局走 Steam"
+    if kind == "sroom" then label = "[" .. NETUI.bridgeSvc() .. T("房] ", "] ") .. label end     -- 0.34 房主开了"对局走桥接平台"
     local isMp = tg and (tg.k == "mp" or tg.k == "srv")
-    if isMp and tonumber(tg.n) and tonumber(tg.max) and tonumber(tg.n) >= tonumber(tg.max) then full = true end     -- §322 多人房人数到上限 = 满（busyNoJoin 也这么判），标签跟着写 [已满]
+    if isMp and tonumber(tg.n) and tonumber(tg.max) and tonumber(tg.n) >= tonumber(tg.max) then full = true end     -- 多人房人数到上限 = 满（busyNoJoin 也这么判），标签跟着写 [已满]
     local mode
     if not isMp then mode = T("[旧版]", "[CLASSIC]")
     elseif tg.m == "duel" then mode = T("[对决]", "[DUEL]")
@@ -492,25 +492,25 @@ local function roomLabel(kind, label, tg)
     else mode = T("[淘汰]", "[ELIM]") end
     local tags = { mode }
     if tg and tg.k == "srv" then tags[#tags + 1] = T("[服务器房]", "[SERVER]") end
-    if full then tags[#tags + 1] = T("[已满]", "[FULL]") end     -- 满了排在对局中前面：多人房对局中能进（§322），满了才是进不去的原因
+    if full then tags[#tags + 1] = T("[已满]", "[FULL]") end     -- 满了排在对局中前面：多人房对局中能进，满了才是进不去的原因
     if tg and (tg.st == "fight" or tg.st == "cd") then tags[#tags + 1] = T("[对局中]", "[IN MATCH]") end
     local count = ""
     if isMp then
         local n, mx = tg.n or "1", tg.max or "4"
         count = n .. "/" .. mx
-        -- §326.4 对局外 AI 不算人数（真人来了挤掉 AI），房主另报 ai=<个数>
+        -- 对局外 AI 不算人数（真人来了挤掉 AI），房主另报 ai=<个数>
         if tonumber(tg.ai) and tonumber(tg.ai) > 0 then count = count .. " + AI " .. tg.ai end
         if tg.m ~= "duel" and (tg.tm == "1" or tg.tm == "3") then
-            count = count .. "·" .. ((tg.tm == "3" and T("三队", "3 TEAMS")) or (tonumber(mx) == 4 and "2v2") or T("两队", "TEAMS"))     -- §317 三队
+            count = count .. "·" .. ((tg.tm == "3" and T("三队", "3 TEAMS")) or (tonumber(mx) == 4 and "2v2") or T("两队", "TEAMS"))     -- 三队
         end
         count = count .. "  "
     end
     return table.concat(tags, " ") .. " " .. count .. label
 end
 
--- 能点"加入"的房间：kind = full（已满的房间）、watch（§141 满了、能观战）和 nohost（§123 在玩但没开房的 Steam 好友）列出来但不算"可加入"
+-- 能点"加入"的房间：kind = full（已满的房间）、watch（满了、能观战）和 nohost（在玩但没开房的平台好友）列出来但不算"可加入"
 -- 对局中（st == "fight" 或 st == "cd"）不可加入
--- §322 多人房（淘汰 / 积分 / 对决）对局中也能进：进去这局先观战，下局参加（用户 11-15："淘汰积分也能中途进"）。
+-- 多人房（淘汰 / 积分 / 对决）对局中也能进：进去这局先观战，下局参加。
 -- 旧版 1v1 的房对局中照旧不能点
 local function busyNoJoin(tg)
     if not tg then return false end
@@ -525,7 +525,7 @@ local function roomOpen(t)
     return true
 end
 
--- lobby.txt 里的加入目标分两类：剪贴板 / 最近（快捷加入，放主页）和房间（局域网房间、开房的 Steam 好友、服务器 / Steam 大厅的房间、
+-- lobby.txt 里的加入目标分两类：剪贴板 / 最近（快捷加入，放主页）和房间（局域网房间、开房的平台好友、服务器 / 平台大厅的房间、
 -- Tailscale 节点，放房间列表页）。kind = full 是已满的房间（v0.19.1 起联机程序单独标），列出来但选不中
 local function netuiTargets(lb)
     local quick, rooms = {}, {}
@@ -555,27 +555,27 @@ end
 local ROOM_CLIP = 60     -- 11-15 房间列表每行截到这么多字（原来 40；面板宽见 GUI_W_ROOMS）
 local function joinItem(t, inList)
     if t.kind == "full" or busyNoJoin(t.tg) then
-        return { label = clipText(t.label, ROOM_CLIP), target = t.target }   -- 已满 / 旧版 1v1 对局中：说明行（灰、跳过）；§322 多人房对局中能点
+        return { label = clipText(t.label, ROOM_CLIP), target = t.target }   -- 已满 / 旧版 1v1 对局中：说明行（灰、跳过）； 多人房对局中能点
     end
-    -- §141 满了、主机认观战的局域网房间（联机程序标 watch）/ 开房的 Steam 好友（watchf）：点了以观战者身份连进去
+    -- 满了、主机认观战的局域网房间（联机程序标 watch）/ 开房的平台好友（watchf）：点了以观战者身份连进去
     if t.kind == "watch" or t.kind == "watchf" then
         return { label = clipText(T("观战 ", "WATCH ") .. t.label, ROOM_CLIP), target = t.target,
                  act = function() netuiCmd("spectate", "target=" .. t.target .. "\n") end }
     end
-    if t.kind == "nohost" then     -- §123 没开房的好友：能点，但只提示，不发起注定超时的连接
+    if t.kind == "nohost" then     -- 没开房的好友：能点，但只提示，不发起注定超时的连接
         return { label = clipText(t.label, ROOM_CLIP), target = t.target,
                  act = function() netuiFlash(T("对方还没开房", "THEY ARE NOT HOSTING YET"), COL_ORANGE) end }
     end
     local isMp = t.tg and (t.tg.k == "mp" or (tonumber(t.tg.max) or 0) >= 2)
-    if t.kind == "sroom" then     -- 0.34 对局走 Steam 的房：自己没开"对局走 Steam"就先确认（steam_match），join 带 steam=1 让联机程序顺手开
+    if t.kind == "sroom" then     -- 0.34 对局走桥接平台的房：自己没开"对局走桥接平台"就先确认（steam_match），join 带桥接平台=1 让联机程序顺手开
         return { label = inList and clipText(t.label, ROOM_CLIP) or (T("加入 ", "JOIN ") .. clipText(t.label, 30)), target = t.target,
                  act = function()
-                     if not NETUI.hasBridge() then     -- 没装桥接扩展包（公开版 / 没有 Steam 扩展）：进不了，提示而不是发注定被拒的 join
+                     if not NETUI.hasBridge() then     -- 没装桥接扩展包（公开版 / 没有桥接平台扩展）：进不了，提示而不是发注定被拒的 join
                          local svc = NETUI.bridgeSvc()
                          netuiFlash(T("这间房的对局走" .. svc .. "，要装了桥接扩展包并在它的插件页启用才能进", "THIS ROOM PLAYS OVER " .. svc:upper() .. "; NEEDS THE " .. svc:upper() .. " EXTENSION"), COL_ORANGE); return
                      end
                      local cmdName = isMp and "mpjoin" or "join"
-                     -- §279 主机设成一直桥接的房：客机不看自己的设置，只要同意过桥接（没同意就先问）
+                     -- 主机设成一直桥接的房：客机不看自己的设置，只要同意过桥接（没同意就先问）
                      consent().ask("bridge_match", function() netuiCmd(cmdName, "target=" .. t.target .. "\nbridge=1\n") end)
                  end }
     end
@@ -592,7 +592,7 @@ local function noRoomsText(mode)
     return t and T(t[1], t[2]) or T("（没发现房间）", "(NO ROOMS FOUND)")
 end
 
--- §91 还在取第一份房间列表时说"正在获取"，别说"没有房间"：联机程序说还在取（listing=1，最多 10 秒），
+-- 还在取第一份房间列表时说"正在获取"，别说"没有房间"：联机程序说还在取（listing=1，最多 10 秒），
 -- 或者刚打开面板 / 进房间列表页 / 换连接方式 1.5 秒内（局域网房间每秒广播一次）
 function NETUI.noRooms(lb, mode, tn)
     local age = tn - (NETUI.listFrom or -100)
@@ -601,7 +601,7 @@ function NETUI.noRooms(lb, mode, tn)
     return noRoomsText(mode)
 end
 
--- 进房间列表页：马上让联机程序重新问一次房间（服务器大厅 / Steam 大厅本来 2–3 秒问一次）
+-- 进房间列表页：马上让联机程序重新问一次房间（服务器大厅 / 平台大厅本来 2–3 秒问一次）
 function NETUI.openRooms()
     -- 0.34 冒烟（11-12）：没同意过时联机程序不发 LIST，页面只会一直"没有房间"，玩家不知道为什么——先按方式问一次同意
     do local lb = netuiRead(now()) or {}
@@ -663,7 +663,7 @@ end
 
 -- ---- v0.20.0 鼠标面板（原 main.lua 段）
 local GUI_Z = 460            -- 比屏幕文字（450）高
-local GUI_ROWS = 17           -- §171 各页底下多了"房间设置…"一行，16 → 17；房间设置单独一页后最多 11 项，回到 16；§105.3 / §106.5 曾 16 项 / 18；v0.27.6 设置页已有 12 项，留两行余量；v0.27.21 13 项（感谢名单），14 → 15；§102 14 项（服务器中转），15 → 16
+local GUI_ROWS = 17           -- 各页底下多了"房间设置…"一行，16 → 17；房间设置单独一页后最多 11 项，回到 16； 曾 16 项 / 18；v0.27.6 设置页已有 12 项，留两行余量；v0.27.21 13 项（感谢名单），14 → 15； 14 项（服务器中转），15 → 16
 local GUI_W = 640            -- 面板最小宽度（Slate 单位）
 -- 11-15 用户："房间列表界面宽度也加宽一些，不然有些人名字长后面很多都看不到了"：房间列表页面板最小宽 1000、每行截到 ROOM_CLIP 字（原来 640 / 40）
 local GUI_W_ROOMS = 1000
@@ -673,7 +673,7 @@ local BG_HOVER = { R = 0.24, G = 0.24, B = 0.28, A = 0.95 }
 local BG_SEL = { R = 0.42, G = 0.30, B = 0.08, A = 0.95 }      -- 键盘选中 / 当前的连接方式：金
 local BG_DOWN = { R = 0.60, G = 0.44, B = 0.12, A = 1.0 }
 local BG_NONE = { R = 0.0, G = 0.0, B = 0.0, A = 0.0 }
-local BG_OFF = { R = 0.10, G = 0.10, B = 0.12, A = 0.45 }      -- §91.1 等回话时的按钮：底色淡一半
+local BG_OFF = { R = 0.10, G = 0.10, B = 0.12, A = 0.45 }      -- 等回话时的按钮：底色淡一半
 
 local function guiNew(cls)
     return StaticConstructObject(StaticFindObject("/Script/UMG." .. cls), GUI.w.WidgetTree)
@@ -904,7 +904,7 @@ end
 -- ============================================================ F3b-3："最近"页（从 main.lua 原样搬出；lobby.txt 的 hn / h<i> 由联机程序给）
 -- ---- 0.34 "最近"页（原 main.lua 段；说明见那里的标题行）
 -- lobby.txt：hn / h<i> = <hist|friend>|<来源>|<时间 unix>|<昵称>|<现在能加入的目标，没有 = ->；steamfriends= / hide= 两个开关。
--- 没有独立的 Steam 好友标签页了：点 Steam 好友那行 = join target=steam:<id>（联机程序临时切到 steam 方式、断开后切回；二次确认 steam_match）。
+-- 没有独立的平台好友标签页了：点平台好友那行 = join target=桥接平台:<id>（联机程序临时切到桥接平台方式、断开后切回；二次确认 steam_match）。
 local RECENT = {}     -- main.lua 里是全局（RECENT = UI.RECENT）
 function RECENT.ago(sec)
     local d = os.time() - sec
@@ -931,7 +931,7 @@ function RECENT.items(lb, items, page)
         items[#items + 1] = { label = clipText(r.nick, 14) .. "  " .. srcName .. "  " .. when .. tail,
                               act = target and function() netuiCmd("join", "target=" .. target .. "\n") end or nil }
     end
-    if NETUI.hasBridge() then     -- §281 桥接好友挪到单独一页
+    if NETUI.hasBridge() then     -- 桥接好友挪到单独一页
         items[#items + 1] = { label = T("桥接好友在单独一页：联机面板首页 → 桥接好友…", "BRIDGE FRIENDS HAVE THEIR OWN PAGE: MAIN PAGE -> BRIDGE FRIENDS..."), col = COL_LABEL }
     end
     local hide = lb.hide == "1"
@@ -945,8 +945,8 @@ end
 
 
 
--- ============================================================ §281 桥接好友页（用户 11-13："steam 好友是不是应该从最近里拆出来，作为单独一页"）
--- 只在装了桥接扩展包、桥在时出现（NETUI.hasBridge，§278）：扩展包停用 = 首页入口和这一页一起没了。lobby.txt fn / f<i> =
+-- ============================================================ 桥接好友页
+-- 只在装了桥接扩展包、桥在时出现（NETUI.hasBridge）：扩展包停用 = 首页入口和这一页一起没了。lobby.txt fn / f<i> =
 -- <1 在开房 | 0 在玩没开房>|<昵称>|<目标 bridge:<ID> 或 ->（联机程序 FriendRows；没开"显示桥接好友"时是 0 行）。
 -- "开房（好友可见）"= cmd host bridge=1：联机程序临时切到桥接方式开房（同从好友行加入），断开后切回；要同意 bridge_match（开房）
 local BFRIENDS = {}
@@ -997,7 +997,7 @@ function BFRIENDS.items(lb, items, page)
                 label = clipText(r.nick, 16) .. "  " .. (r.hosting and T("在开房  [加入]", "HOSTING  [JOIN]") or T("在玩，没开房", "PLAYING, NOT HOSTING"))
             end
             local canAct = (target and not inSession)
-            -- §322 多人房对局中也能进（进去先观战）；旧版 1v1 不走这里
+            -- 多人房对局中也能进（进去先观战）；旧版 1v1 不走这里
             items[#items + 1] = {
                 label = label,
                 act = canAct and function()
@@ -1023,23 +1023,23 @@ function BFRIENDS.items(lb, items, page)
 end
 
 -- ============================================================ F3b-4：二次确认 CONSENT 框架 + 文案表 + EXTCTX + 拉黑 / 对手页 OPP（从 main.lua 原样搬出）
--- 文案写的全是联机功能（lan / server / ranked / steam / upnp / cfg_fetch），是 fornet 概念；游戏适配 / 扩展包经 CONSENT.TEXT 加自己的键。
+-- 文案写的全是联机功能（lan / server / ranked / 桥接平台 / upnp / cfg_fetch），是 fornet 概念；游戏适配 / 扩展包经 CONSENT.TEXT 加自己的键。
 -- PREF（本地偏好）和 LANG 来自 fornet_core（调用方给同一份）
 local LANG, PREF, COL_GREEN = ctx.LANG, ctx.PREF, ctx.COL_GREEN
 local HUD_ROWS = ctx.HUD_ROWS     -- F3b-5：屏幕文字最多几行（netuiRows 截断用）
 -- ---- 0.34 二次确认 CONSENT（原 main.lua 段；说明见那里的标题行）
 -- 一张表管所有确认：key → { ver, zh = {...}, en = {...} }。同意过存 rules.txt consent_<key>=<ver>；文案改了把 ver +1 就会重新问。
 -- PRIVACY.md 由 tools/gen_privacy.py 从这张表生成，弹窗和隐私说明逐字一致——改文案只改这里。
--- 用法：CONSENT.ask(key, fn)：同意过直接 fn()，没同意翻到确认页，点"同意并继续"后 fn()。
---       netuiCmd 里的 CONSENT.gate(cmd, extra, replay)：开房 / 加入 / AI 房等真人按当前方式查 play + 方式那个键。
+-- 用法：CONSENT.ask(key, fn)：同意过直接 fn，没同意翻到确认页，点"同意并继续"后 fn。
+-- netuiCmd 里的 CONSENT.gate(cmd, extra, replay)：开房 / 加入 / AI 房等真人按当前方式查 play + 方式那个键。
 local CONSENT = { pending = nil, PAGE = "consent" }
 -- X1 给文件末尾的 ST.ext 用：T / netuiCmd / NETUI / 颜色都是这一段的 local，末尾那块看不见（11-12 冒烟：扩展页 T 为 nil）
 local EXTCTX = { T = T, netuiCmd = netuiCmd, netuiFlash = netuiFlash, NETUI = NETUI, COL = { label = COL_LABEL, orange = COL_ORANGE, green = COL_GREEN, white = COL_WHITE } }
 
--- §129 主机开了 UPnP：显示联机程序给的结果（lobby.txt 的 upnp=，文案是联机程序按语言给的，这里不另拼）。
+-- 主机开了 UPnP：显示联机程序给的结果（lobby.txt 的 upnp=，文案是联机程序按语言给的，这里不另拼）。
 -- 正在请求橙、已转发绿、失败红；太长折成两行（先在句号处分开，让"请手动转发"单独一行；每行再长就截断），说明行不占光标。
 -- 宽度按半角算（中文 2），鼠标面板一行大约放 46 个半角。
--- §278：这是基底功能，F4b 误搬进 game_ranked.lua、11-13 又跟着进了排位扩展包 → 排位包停用时房间里开面板每帧报 nil，搬回基底
+-- 这是基底功能，F4b 误搬进 game_ranked.lua、11-13 又跟着进了排位扩展包 → 排位包停用时房间里开面板每帧报 nil，搬回基底
 NETUI.UPNP_W = 44
 function NETUI.upnpInfo(lb, items)
     local s = lb.upnp or ""
@@ -1082,8 +1082,8 @@ CONSENT.TEXT = {
         en = { "Once connected, the mod registers your name, install-id hash, room name and map on this server; it can also see your IP address. The server only introduces both sides for a direct connection; match traffic does not pass through it. If the host allows spectators, the spectator stream is relayed by it.",
                "The server software is open source and anyone can run one. The mod cannot verify who runs this server, how it handles this data or whether it is safe, and takes no responsibility for it.",
                "Only connect to servers whose origin you know and trust. You will be asked again if the address changes. By choosing Agree you confirm that you understand and accept the risk of connecting to this server." } },
-    -- mp（多人房：房里所有人都能看到你的 IP）、spec（观众收到你的对局数据）归各自的玩法 mod，经 U.addConsent 登记（11-14 用户定）
-    -- F4c-2：bridge_match / bridge_friends（对局走外部服务 / 显示外部服务好友）的文案由提供桥接 DLL 的扩展包经 API.consent.registerBase 登记（ext\steam\init.lua），基底不写任何具体服务
+    -- mp（多人房：房里所有人都能看到你的 IP）、spec（观众收到你的对局数据）归各自的玩法 mod，经 U.addConsent 登记
+    -- F4c-2：bridge_match / bridge_friends（对局走外部服务 / 显示外部服务好友）的文案由提供桥接 DLL 的扩展包经 API.consent.registerBase 登记（ext\桥接平台\init.lua），基底不写任何具体服务
     cfg_fetch = { ver = 1,
         zh = { "从大厅服务器下载一份数值表（标准数值基准 + 武器平衡，只有数字，不含代码）；", "保存在本机 net\\srvcfg.txt，以后开局按它算。" },
         en = { "Downloads a stat table (standard stats + weapon balance; numbers only, no code) from the lobby server;", "it is saved locally as net\\srvcfg.txt and used in later matches." } },
@@ -1092,7 +1092,7 @@ CONSENT.TEXT = {
         en = { "UPnP opens a port mapping (UDP, the helper's port) on your router; it is removed when you turn it off." } },
 }
 CONSENT.MODE_KEY = { lan = "lan", server = "server", bridge = "bridge_match" }     -- F4b：注册进来的方式（排位）经 U.addMode 加
--- 隐私说明的固定部分（PRIVACY.md 的头 / 尾也从这里生成，改文字只改这里）。用户 11-12 定：不写任何指向特定人 / 特定服务器的描述（没有"作者""默认那台""所在地"），只写通用事实
+-- 隐私说明的固定部分（PRIVACY.md 的头 / 尾也从这里生成，改文字只改这里）。不写任何指向特定人 / 特定服务器的描述（没有"作者""默认那台""所在地"），只写通用事实
 CONSENT.PRIVACY_PLACE = { "", "" }     -- 以前放服务器所在地；现在不写，占位保留给 gen_privacy.py
 CONSENT.PRIVACY_HEAD = {
     zh = { "这个模组是单人游戏的第三方联机 MOD。你没同意过下面任何一项时，它不会发出任何带你标识的数据（唯一的例外是末尾说的\"联机是否可用\"查询，不带标识）。",
@@ -1171,7 +1171,7 @@ function CONSENT.privacyItems(lb, items, page)
     items[#items + 1] = { label = T("返回", "BACK"), nav = "back", act = function() NETUI.privPg = 1; page("settings")() end }
 end
 
--- 0.34（用户 11-12 定）：服务器大厅 / 武林盟主的同意绑定当时填的那台服务器地址——换了地址就是另一台，要再问一次
+-- 0.34：服务器大厅 / 排位的同意绑定当时填的那台服务器地址——换了地址就是另一台，要再问一次
 CONSENT.PER_SERVER = { server = true }     -- F4b：排位的键由 U.addMode 加
 function CONSENT.serverAddr()
     local lb = netuiRead(now()) or {}
@@ -1239,10 +1239,10 @@ end
 function CONSENT.grantAll() for k in pairs(CONSENT.TEXT) do CONSENT.grant(k); if CONSENT.PER_SERVER[k] then PREF.set("consent_" .. k .. "_addr", "*") end end end     -- 测试 / 安全模式重置用（地址绑定给 *）
 function CONSENT.revokeAll()
     for k in pairs(CONSENT.TEXT) do PREF.set("consent_" .. k, nil); PREF.set("consent_" .. k .. "_addr", nil) end
-    -- 0.34 评审：撤回同意时把靠这些同意开着的东西也关掉（不然富状态 / UPnP / Steam 房照旧）
+    -- 0.34 评审：撤回同意时把靠这些同意开着的东西也关掉（不然富状态 / UPnP / 桥接平台房照旧）
     local lb = netuiRead(now()) or {}
     if lb.bridgefriends == "1" then netuiCmd("bridgefriends", "on=0\n") end
-    -- §279 "对局走桥接"三档不跟着关：没同意就不会用桥接（1 档只走直连，2 档开房时再问）
+    -- "对局走桥接"三档不跟着关：没同意就不会用桥接（1 档只走直连，2 档开房时再问）
     netuiCmd("upnp", "on=0\n")
     if (lb.role or "none") ~= "none" then netuiCmd("stop", "") end
 end
@@ -1280,7 +1280,7 @@ function CONSENT.gate(cmd, extra, replay)
     local keys
     local isMp = cmd == "mphost" or cmd == "mpjoin"     -- 11-14：多人房另加 mp（房里所有人都能看到你的 IP）
     if cmd == "mphost" then cmd = "host" elseif cmd == "mpjoin" then cmd = "join" end     -- 0.35 mesh 多人房：开 / 进房和 1v1 一样要同意
-    if cmd == "mode" then     -- 0.34 评审：切到服务器大厅 / 武林盟主 / 局域网就会向服务器 / 局域网发查询，选标签时就问（本地 AI 不问）
+    if cmd == "mode" then     -- 0.34 评审：切到服务器大厅 / 排位 / 局域网就会向服务器 / 局域网发查询，选标签时就问（本地 AI 不问）
         local m = (extra or ""):match("mode=(%w+)")
         if not m or m == "ai" then return true end
         keys = { "play", CONSENT.MODE_KEY[m] or m }
@@ -1300,10 +1300,10 @@ function CONSENT.gate(cmd, extra, replay)
             if lb.upnpon == "1" then keys[#keys + 1] = "upnp" end     -- 0.34 冒烟：0.33 留下的 upnp=1 开房会直接改路由器，先问
         else
         local mk = CONSENT.MODE_KEY[lb.mode or ""]
-        if cmd == "join" and (extra or ""):find("target=bridge:", 1, true) then mk = "bridge_match" end     -- "最近"页点 Steam 好友：经 Steam 连
+        if cmd == "join" and (extra or ""):find("target=bridge:", 1, true) then mk = "bridge_match" end     -- "最近"页点平台好友：经桥接平台连
         keys = { "play", mk }
-        if cmd == "join" and (extra or ""):find("\nbridge=1", 1, true) then keys[#keys + 1] = "bridge_match" end     -- 进 Steam 房
-        if cmd == "host" and lb.bridgeroom == "2" then keys[#keys + 1] = "bridge_match" end                        -- 开 Steam 房
+        if cmd == "join" and (extra or ""):find("\nbridge=1", 1, true) then keys[#keys + 1] = "bridge_match" end     -- 进桥接平台房
+        if cmd == "host" and lb.bridgeroom == "2" then keys[#keys + 1] = "bridge_match" end                        -- 开桥接平台房
         if cmd == "host" and lb.upnpon == "1" then keys[#keys + 1] = "upnp" end                                 -- 0.34 冒烟：upnp=1 开房会改路由器，先问
         end
     elseif cmd == "airoom" and (extra or ""):find("on=1", 1, true) then
@@ -1380,7 +1380,7 @@ function CONSENT.revokeKeys(keys)
         if k == "bridge_friends" and (netuiRead(now()) or {}).bridgefriends == "1" then netuiCmd("bridgefriends", "on=0\n") end     -- 靠这项开着的好友列表一起关
     end
 end
--- 条款标题行（插件页 / 玩法详情页共用）：· 标题（已同意 / 未同意）…  点了看全文
+-- 条款标题行（插件页 / 玩法详情页共用）：· 标题（已同意 / 未同意）… 点了看全文
 function CONSENT.titleRows(items, keys)
     for _, k in ipairs(keys) do
         local has = CONSENT.has(k)
@@ -1396,8 +1396,8 @@ function CONSENT.textPage(lb, tn, items, page)
     items[#items + 1] = { label = T("返回", "BACK"), act = function() NETUI.page, NETUI.sel, NETUI.ctext = c.back or "main", c.sel or 1, nil end }
 end
 
--- §174 拉黑（HANDOVER §174；举报 0.34 整个删了，TASK_0.34 §2.3 / HANDOVER §250.3——玩家有问题直接联系作者）。
--- 名单、标识、拒绝连入都在联机程序里（lobby/NetExtras.cs Blacklist，只存安装号 / SteamID 哈希，不存 IP），面板只发命令：
+-- 拉黑（举报 0.34 整个删了， / ——玩家有问题直接联系作者）。
+-- 名单、标识、拒绝连入都在联机程序里（lobby/NetExtras.cs Blacklist，只存安装号 / 平台账号 ID哈希，不存 IP），面板只发命令：
 -- block who=<第几个最近对手> / unblock i=<黑名单第几个>。lobby.txt：
 -- opn / op<i> = <已拉黑 0/1>|<连接方式>|<几秒前>|<昵称>；bln / bl<i> = <连接方式>|<拉黑时间 unix>|<昵称>
 local OPP = { who = 1, pg = 1, PER = 8 }
@@ -1416,7 +1416,7 @@ local function blkAgo(sec)
     return string.format(T("%d 小时前", "%d H AGO"), math.floor(sec / 3600))
 end
 
--- 系统设置页"感谢名单…"下面的入口（用户 11-11：首页 / 各方式页都不放，统一放这里；一直显示，进去是最近对手列表 + 黑名单）
+-- 系统设置页"感谢名单…"下面的入口
 function OPP.entry(lb, items, page)
     items[#items + 1] = { label = T("拉黑 / 黑名单…", "BLOCK / BLACKLIST..."), act = page("opp") }
 end
@@ -1478,9 +1478,9 @@ end
 -- 状态行：U.statusPre 前置钩子列表（返回文字就盖过其他状态）；U.pingMs 往返毫秒。每次拼装前跑 U.pollHooks（扩展包轮询）。
 U.pages, U.pagePrefix, U.statusPre, U.pollHooks = {}, {}, {}, {}
 -- F4b：连接方式注册。d = { key, zh, en, after（标签插在哪个方式之后，默认末尾）, tab = { zh, en }（鼠标面板标签文字，默认同名字）, viaServer（底下走服务器大厅那一套）,
---   noRooms = { zh, en }（房间列表空时的话）, hostLabel = { zh, en }（开房按钮）, rows = fn(lb, items, page, inRoom)（主页上这个方式自己的行）, noAiRoom（不能当 AI 等人房间）,
---   inRoom = fn(lb)（房间里 lobby 的 mode 不是它时，怎么认出这间房是它的，比如排位的 rk=1）,
---   consent = { key, text = { ver, zh, en }, title = { zh, en }, perServer, after }（同意键：切到这个方式 / 开房 / 加入都要先同意；文案进隐私说明页，排在 after 之后） }
+-- noRooms = { zh, en }（房间列表空时的话）, hostLabel = { zh, en }（开房按钮）, rows = fn(lb, items, page, inRoom)（主页上这个方式自己的行）, noAiRoom（不能当 AI 等人房间）,
+-- inRoom = fn(lb)（房间里 lobby 的 mode 不是它时，怎么认出这间房是它的，比如排位的 rk=1）,
+-- consent = { key, text = { ver, zh, en }, title = { zh, en }, perServer, after }（同意键：切到这个方式 / 开房 / 加入都要先同意；文案进隐私说明页，排在 after 之后） }
 U.GUI_TAB, U.MODE_HOST_LABEL, U.MODE_ROWS, U.MODE_NO_AIROOM, U.MODE_INROOM = GUI_TAB, MODE_HOST_LABEL, MODE_ROWS, MODE_NO_AIROOM, MODE_INROOM
 U.svc = NETUI.svc     -- F4c-2：文案里的 {SVC} → 桥接服务显示名
 -- 房间里（连着 / 开着房）这间房算不算某个注册方式的：lobby 的 mode 等于它，或它自己的 inRoom(lb) 说是（排位房间 lobby 的 mode 可能是 server，靠 rk=1 认）
@@ -1541,9 +1541,9 @@ end
 -- 核心自己的页
 U.page("consent", function(lb, tn, items, page) CONSENT.items(lb, items, page) end)            -- 0.34 二次确认页
 U.page("recent", function(lb, tn, items, page) RECENT.items(lb, items, page) end)              -- 0.34 最近一起玩过的人
-U.page("bfriends", function(lb, tn, items, page) BFRIENDS.items(lb, items, page) end)          -- §281 桥接好友
+U.page("bfriends", function(lb, tn, items, page) BFRIENDS.items(lb, items, page) end)          -- 桥接好友
 U.page("privacy", function(lb, tn, items, page) CONSENT.privacyItems(lb, items, page) end)     -- 0.34 隐私说明
-U.page("opp", function(lb, tn, items, page) OPP.oppItems(lb, items, page) end)                 -- §174 拉黑
+U.page("opp", function(lb, tn, items, page) OPP.oppItems(lb, items, page) end)                 -- 拉黑
 U.page("oppact", function(lb, tn, items, page) OPP.actItems(lb, items, page) end)
 U.page("blist", function(lb, tn, items, page) OPP.listItems(lb, items, page) end)
 U.page("ctext", CONSENT.textPage, { "联机 · 条款全文", "ONLINE · TERMS" })     -- 11-15 条款全文（插件页 / 玩法页点标题进来）
@@ -1554,7 +1554,7 @@ local function netuiItems(lb, tn)
         if not netuiStarting() then
             items[#items + 1] = { label = T("重新启动联机程序", "RESTART THE ONLINE HELPER"),
                                   act = function() NETUI.tries = 0; netuiLaunch() end }
-            -- §122 起发布包没有 <退路 exe>（联机程序是游戏里的 fornet_lobby.dll）：只有 exe 真在时才叫人手动打开它
+            -- 起发布包没有 <退路 exe>（联机程序是游戏里的 fornet_lobby.dll）：只有 exe 真在时才叫人手动打开它
             local exe = io.open((ROOT .. "/" .. LOBBY_EXE):gsub("/", "\\"), "rb")
             if exe then exe:close() end
             local md = "Mods\\" .. (tostring(ROOT):match("([^/\\]+)[/\\]*$") or "?")     -- F5：模组目录名不写死
@@ -1565,7 +1565,7 @@ local function netuiItems(lb, tn)
     end
     local mode = netuiMode(lb, tn)
     local function page(p) return function() NETUI.page = p; NETUI.sel = 1 end end
-    -- §171 每页底下：房间设置… 在 系统设置… 上面（用户 11-09；"设置"改名"系统设置"）
+    -- 每页底下：房间设置… 在 系统设置… 上面
     local function settingsBtns()
         items[#items + 1] = { label = T("房间设置…", "ROOM RULES..."), act = page("room") }
         items[#items + 1] = { label = T("系统设置…", "SYSTEM SETTINGS..."), act = page("settings") }
@@ -1593,7 +1593,7 @@ local function netuiStatus(lb, tn)
         return T("联机程序没响应", "THE ONLINE HELPER IS NOT RESPONDING"), COL_RED
     end
     local b = NETUI.busy
-    if b then return T(b.zh, b.en) .. ({ ".", "..", "..." })[math.floor(tn * 3) % 3 + 1], COL_ORANGE end   -- §91 点会动
+    if b then return T(b.zh, b.en) .. ({ ".", "..", "..." })[math.floor(tn * 3) % 3 + 1], COL_ORANGE end   -- 点会动
     if (lb.err or "") ~= "" then return clipText(lb.err, 34), COL_RED end
     -- 安全模式（olevel 2）：红字一直显示原因（服务器下线标志 L1 X3 删了）
     if (lb.olevel or "0") ~= "0" and (lb.omsg or "") ~= "" and lb.connected ~= "1" then return clipText(lb.omsg, 34), lb.olevel == "2" and COL_RED or COL_ORANGE end
@@ -1617,7 +1617,7 @@ local function netuiStatus(lb, tn)
                .. (route and ("  " .. route) or "") .. ha
                .. (lb.aiwait == "1" and (T("  房间开着：", "  ROOM: ") .. clipText(lb.aiwaitaddr, 22)) or ""), COL_GREEN
     end
-    -- §312 实测：多人房里 connected 是旧 1v1 的"有对手包"，对决没人上场时为 0 → 4 人的房间房主写"等对方加入"、客机写"正在连接"。
+    -- 实测：多人房里 connected 是旧 1v1 的"有对手包"，对决没人上场时为 0 → 4 人的房间房主写"等对方加入"、客机写"正在连接"。
     -- 房里有别人就按多人房显示
     local mpn = tonumber(lb.mpn) or 0
     if lb.mp == "1" and mpn >= 2 then
@@ -1649,7 +1649,7 @@ local function netuiRows(tn)
     end
     NETUI.busyStep(lb, tn)
     local items = netuiItems(lb, tn)
-    -- §91 等回话时按钮点不了；off = 本来是按钮（鼠标面板照样画按钮底、整个变暗，不像说明行那样只剩字，§91.1）
+    -- 等回话时按钮点不了；off = 本来是按钮（鼠标面板照样画按钮底、整个变暗，不像说明行那样只剩字）
     if NETUI.busy then for _, it in ipairs(items) do if it.act then it.act, it.off = nil, true end end end
     -- 房间列表页：刷新后光标跟着同一个房间（按 target 认）；房间没了就留在原位置
     if NETUI.page == "rooms" and NETUI.selTarget then
@@ -1709,12 +1709,12 @@ local function netuiRows(tn)
     if NETUI.page == "privacy" then     -- 0.34 隐私说明分页：上一页 / 下一页 / 返回 走底下的翻页栏（不然行数上限之外的按钮画不出来）
         NETUI.view.priv, NETUI.view.roomPage, NETUI.view.pages = true, NETUI.privPg or 1, NETUI.privPages or 1
     end
-    -- §110 排行榜页也用底下的翻页栏（rank = true；页码来自 lobby.txt 的 rktop）
+    -- 排行榜页也用底下的翻页栏（rank = true；页码来自 lobby.txt 的 rktop）
     if headExtra then for k, v in pairs(headExtra) do NETUI.view[k] = v end end     -- F3b-5：注册页的翻页栏 / 页码等（排行榜 rank=、规则 rules=、统计 stat=）
     local rows = { { c = title, col = COL_LABEL, size = 0.8 },
                    { c = st, col = col, size = 0.7 } }
     NETUI.selTarget = items[NETUI.sel] and items[NETUI.sel].target or nil
-    -- 项目比屏幕行多（§176 房间设置页最多 15 项 + 标题 / 状态 / 说明 = 18 > HUD_ROWS）：只显示选中项附近一段，
+    -- 项目比屏幕行多（房间设置页最多 15 项 + 标题 / 状态 / 说明 = 18 > HUD_ROWS）：只显示选中项附近一段，
     -- 上下各留一行"还有 N 项"，PgUp/PgDn 走到哪段就显示哪段（以前是截掉最后几项，"返回"选得到却看不见）
     local cap, first, last = HUD_ROWS - 3, 1, #items
     if #items > cap then

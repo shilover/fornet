@@ -33,9 +33,9 @@ python -X utf8 -I tests\run_all.py
 `FORNET_GAME_CS` to a `;`-separated list of absolute `.cs` paths and both `build.bat` and the AOT project compile them into the same assembly.
 Implement the partial methods there:
 
-- `GameInfo.Configure()`: `ModName / TitleZh / TitleEn / GameZh / GameEn / ProcessName / BackupSave`
+- `GameInfo.Configure`: `ModName / TitleZh / TitleEn / GameZh / GameEn / ProcessName / BackupSave`
 - `LocalAiSupport.Register(ref ILocalAiImpl)`: local AI (leave it out and there is none)
-- `WireTag.Configure()`: wire names (below)
+- `WireTag.Configure`: wire names (below)
 
 The interfaces are in `lobby/GameInfo.cs`, `lobby/LocalAiApi.cs` and `lobby/WireTag.cs`.
 
@@ -49,12 +49,12 @@ plugins (`fnx_`) and the bridge pipe prefix (`fornet_bridge_`). They default to 
 **A new game just keeps the defaults.**
 
 A game whose players already use another set of names (say it had its own online mod before moving onto 4net) sets them back in
-`WireTag.Configure()`; the wire format then stays byte-for-byte the same, so installed old versions and running servers keep working:
+`WireTag.Configure`; the wire format then stays byte-for-byte the same, so installed old versions and running servers keep working:
 
 ```csharp
 static partial class WireTag
 {
-    static partial void Configure() { S = "XYZS"; P = "XYZ"; Salt = "xyzmp"; EnvPrefix = "XYZ_"; Abi = "xyzx_"; Pipe = "xyz_bridge_"; }
+    static partial void Configure { S = "XYZS"; P = "XYZ"; Salt = "xyzmp"; EnvPrefix = "XYZ_"; Abi = "xyzx_"; Pipe = "xyz_bridge_"; }
 }
 ```
 

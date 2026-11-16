@@ -1,8 +1,8 @@
--- fornet_hud.lua —— fornet（4net）UE4SS 网络核：屏幕文字底座（docs/EXTENSIONS.md §10.4 F3b-6；docs/FORNET_SPLIT.md）。
+-- fornet_hud.lua —— fornet（4net）UE4SS 网络核：屏幕文字底座（F3b-6）。
 -- 从游戏模组的 main.lua 原样搬出：颜色表、UMG 屏幕文字（UserWidget + CanvasPanel + TextBlock，贴在屏幕上）、退路 3D TextRender 文字、hudLog。
 -- 只用 UE4SS 的 StaticFindObject / StaticConstructObject / FName / FText 和调用方给的玩家控制器 / GameStatics，不碰游戏对象。
 -- 用法：local HD = require("fornet_hud")({ out=, valid=, try=, rawProp=, getP1PC=, gstat=, LANG=, HUD_SIZE=, MATCH=, setText=, ST= })
---   MATCH = 3D 文字的锚点表（MATCH.text / MATCH.hud / MATCH.shown）；setText = 3D 主文字；ST.mapLoads = 换过几次地图（换图后重建控件）
+-- MATCH = 3D 文字的锚点表（MATCH.text / MATCH.hud / MATCH.shown）；setText = 3D 主文字；ST.mapLoads = 换过几次地图（换图后重建控件）
 return function(ctx)
 local out, valid, try, rawProp, getP1PC, gstat = ctx.out, ctx.valid, ctx.try, ctx.rawProp, ctx.getP1PC, ctx.gstat
 local LANG, HUD_SIZE, MATCH, setText, ST = ctx.LANG, ctx.HUD_SIZE, ctx.MATCH, ctx.setText, ctx.ST
@@ -33,7 +33,7 @@ local function hudPiece(align)
     return { a = a, c = comp, orig = rawProp(comp, "Font") }
 end
 
--- §309（多人玩法实测 11-14）：颜色表是 { R, G, B, A }（0–255）。对决 / 多人的 HUD 行以前写成小写 r / g / b，
+-- （多人玩法实测 11-14）：颜色表是 { R, G, B, A }（0–255）。对决 / 多人的 HUD 行以前写成小写 r / g / b，
 -- 每帧在 pieceSet 的 format 里报错（对决模式下 tick 一直刷 "!! tick -> fornet_hud.lua:44"）；这里统一兜底，坏的按白色
 local function normCol(c)
     if type(c) ~= "table" then return COL_WHITE end
@@ -69,7 +69,7 @@ local function pieceSet(p, s, col, size, dz)
 end
 
 -- net-ui：联机面板最多 9 行，所以 3 → 9；文字物体按需要的行数逐步生成（平时还是只有 3 行 × 3 个）
-local HUD_ROWS = 17         -- 房间设置拆成单独一页后设置页 11 项、房间设置页 7 项，回到 17；§105.3 / §106.5 曾是 16 项 / 19；v0.18.6：面板加了"输入地址 / 复制地址 / 设置"三行，9 → 12；v0.27.6 设置页 12 项（伤害倍率、全部可格挡），12 → 15；v0.27.21 设置页加感谢名单（13 项），15 → 16；§102 加"直连不通时用服务器中转"（14 项），16 → 17
+local HUD_ROWS = 17         -- 房间设置拆成单独一页后设置页 11 项、房间设置页 7 项，回到 17； 曾是 16 项 / 19；v0.18.6：面板加了"输入地址 / 复制地址 / 设置"三行，9 → 12；v0.27.6 设置页 12 项（伤害倍率、全部可格挡），12 → 15；v0.27.21 设置页加感谢名单（13 项），15 → 16； 加"直连不通时用服务器中转"（14 项），16 → 17
 
 local function setHud(rows)
     if rows and valid(MATCH.text) and #(MATCH.hud or {}) < math.min(#rows, HUD_ROWS) then
@@ -100,13 +100,13 @@ local function setHud(rows)
     end
 end
 
--- v0.18.5 屏幕文字改用 UMG（用户 2026-11-04："文字渲染不应该虚化"）：TextRender 是摆在镜头前 2 米的 3D 物体，
+-- v0.18.5 屏幕文字改用 UMG：TextRender 是摆在镜头前 2 米的 3D 物体，
 -- 会吃景深 / 动态模糊 / TAA，还会被镜头前的草挡住。UMG 是贴在屏幕上的 2D 界面，画在后处理之后，和游戏自己的 UI 一样清楚。
 -- 做法（18:15 实机原型验证）：用引擎的空 UserWidget 类 Create，它的 WidgetTree 里放一个 CanvasPanel 当根，
 -- 每行按需加 TextBlock（标签 / 值 / 居中整句三个），AddToViewport。默认字体 Roboto 缺的中文字形 Slate 会自动回退，中文能显示。
 -- 任何一步失败就退回旧的 TextRender（HUD.failed），不影响对局
 local HUD = { w = nil, cv = nil, rows = {}, side = {}, failed = false }
-local SIDE_X, SIDE_Y, SIDE_PAD = 1.0, 0.16, 28     -- §310 右侧栏：屏幕右边、从高度 16% 往下排，离右边 28 像素
+local SIDE_X, SIDE_Y, SIDE_PAD = 1.0, 0.16, 28     -- 右侧栏：屏幕右边、从高度 16% 往下排，离右边 28 像素
 local HUD_PX = 34          -- 字号倍数 1.0 对应的像素
 local HUD_Y = 0.30         -- 整块文字的中心在屏幕高度的这个比例处
 local HUD_Z = 450          -- 视口层级（游戏自己的 HUD 在下面）
@@ -117,7 +117,7 @@ local function umgColor(c)
 end
 
 local function umgRoot()
-    -- v0.27.12 换过地图（HUD.gen 对不上）就不碰旧控件，连 IsInViewport 也不调（§93）
+    -- v0.27.12 换过地图（HUD.gen 对不上）就不碰旧控件，连 IsInViewport 也不调
     if HUD.gen == ST.mapLoads and valid(HUD.w) and valid(HUD.cv) then
         local okV, inVp = pcall(function() return HUD.w:IsInViewport() end)
         if okV and inVp then return HUD.cv end
@@ -189,11 +189,11 @@ local function umgHud(rows)
     local hide = okP and paused == true
     if hide ~= HUD.hidden then
         HUD.hidden = hide
-        if hide and MATCH.uiPaused then MATCH.uiPaused() end         -- §260 准备 / 对局中界面还是开出来了：取消暂停
+        if hide and MATCH.uiPaused then MATCH.uiPaused() end         -- 准备 / 对局中界面还是开出来了：取消暂停
         pcall(function() HUD.w:SetVisibility(hide and 1 or 3) end)
     end
     local ok, err = pcall(function()
-        -- §310（11-14 实测）：常驻信息（计分板、剩余时间、对决排队……）标 side 的放屏幕右侧一栏，中间只留一次性提示
+        -- （11-14 实测）：常驻信息（计分板、剩余时间、对决排队……）标 side 的放屏幕右侧一栏，中间只留一次性提示
         local side = {}
         if rows then
             local mid = {}
@@ -255,7 +255,7 @@ local function hudLog(rows)
     if not rows then return nil end
     local parts = {}
     for _, r in ipairs(rows) do
-        if not r.nolog then parts[#parts + 1] = r.c or ((r.l or "") .. " " .. (r.v or "")) end     -- §173 倒计时钟每秒变，不进日志
+        if not r.nolog then parts[#parts + 1] = r.c or ((r.l or "") .. " " .. (r.v or "")) end     -- 倒计时钟每秒变，不进日志
     end
     if #parts == 0 then return nil end
     return table.concat(parts, " / ")

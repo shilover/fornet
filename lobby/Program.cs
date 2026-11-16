@@ -2,26 +2,26 @@
 // 编译：build.bat（用系统自带的 csc.exe，C# 5 语法：不能用 $"" 插值、?. 这类新语法）。
 //
 // 游戏里的 Lua 只读写 <exe 所在目录>\net\ 下的文本文件：
-//   state_local.txt   游戏写，本程序发给对方（§83 起游戏连得上命名管道时走管道，见 GamePipe.cs；这两个文件是兜底）
-//   state_remote.txt  本程序收到对方的包后写，游戏读（同上）
-//   pipe.txt          本程序写：管道名（name=），游戏据此连管道
-//   session.txt       本程序写：role=host|client|none、connected、peer；游戏据此决定自己是主机还是客机
-//   lang.txt          本程序写：lang=zh|en（窗口右上角切换），游戏据此切换屏幕提示的语言
-//   lobby.txt         本程序写（每 0.5 秒）：给游戏内联机面板看的状态和可加入目标（net-ui，docs/NETWORK_UI.md §2.5）
-//   cmd.txt           游戏内联机面板写：host / join / stop / mode / show，本程序按 id 执行一次
+// state_local.txt 游戏写，本程序发给对方（起游戏连得上命名管道时走管道，见 GamePipe.cs；这两个文件是兜底）
+// state_remote.txt 本程序收到对方的包后写，游戏读（同上）
+// pipe.txt 本程序写：管道名（name=），游戏据此连管道
+// session.txt 本程序写：role=host|client|none、connected、peer；游戏据此决定自己是主机还是客机
+// lang.txt 本程序写：lang=zh|en（窗口右上角切换），游戏据此切换屏幕提示的语言
+// lobby.txt 本程序写（每 0.5 秒）：给游戏内联机面板看的状态和可加入目标（net-ui，docs/NETWORK_UI.md）
+// cmd.txt 游戏内联机面板写：host / join / stop / mode / show，本程序按 id 执行一次
 // 房间发现：主机每秒往 UDP 27016 广播 "4NROOM|名字|端口|地图|是否已满|能观战"，加入方监听同一端口列出来。
-// 第 6 段 §141 起有（"1" = 这个主机认观战连接）；旧版主机只有 5 段，满房照旧不能点
+// 第 6 段 起有（"1" = 这个主机认观战连接）；旧版主机只有 5 段，满房照旧不能点
 // 连接方式（net-ui）：局域网（含 Tailscale / ZeroTier，见 NetExtras.cs）、
 // 服务器大厅（自建服务端登记房间 + 打洞，服务器开了中转时不通走中转，含输入 IP 直连，ServerLobby.cs）、本地 AI 对战（接口 LocalAiApi.cs，AI 本身由游戏适配编进来）。
-// 开发版另有 Steam 好友（Bridge.cs）；Steam 大厅 v0.34 起移除（TASK_0.34 §2.1）；发布版不带（build.bat release，§98）。
+// 开发版另有平台好友（Bridge.cs）；平台大厅 v0.34 起移除；发布版不带（build.bat release）。
 //
-// 命令行（自动化测试用）：FornetLobby.exe --host | --join IP[:端口]  [--seconds N] [--dir 目录] [--log 文件] [--no-backup]
-//   --bg          后台运行（不显示窗口；游戏启动时 / 游戏内联机面板用它启动；游戏退出 3 秒后自己退出，给了 --seconds 时不自动退）
-//   --steam-probe 只登录 Steam、列出在玩这个游戏的好友，然后退出
-//   --sim-no-direct      服务器大厅：丢掉所有不是服务器发来的包（模拟打洞不通，测"直连 3 次失败改走中转"）
-//   --secret 密码 / --port 端口      命令行模式的联机密码（窗口模式用 netcfg.txt 的 secret=）/ 主机端口（给了就不广播）
-//   --sim-loss 0.3 / --sim-reorder / --sim-skew 秒   v0.22.0 测试：发出的包随机丢 / 30% 延后 20–200ms（乱序）/ 签名时间戳偏移
-//   可靠事件：游戏写 net\rel_out.txt、读 net\rel_in.txt（Reliable.cs 文件头）
+// 命令行（自动化测试用）：FornetLobby.exe --host | --join IP[:端口] [--seconds N] [--dir 目录] [--log 文件] [--no-backup]
+// --bg 后台运行（不显示窗口；游戏启动时 / 游戏内联机面板用它启动；游戏退出 3 秒后自己退出，给了 --seconds 时不自动退）
+// --steam-probe 只登录桥接平台、列出在玩这个游戏的好友，然后退出
+// --sim-no-direct 服务器大厅：丢掉所有不是服务器发来的包（模拟打洞不通，测"直连 3 次失败改走中转"）
+// --secret 密码 / --port 端口 命令行模式的联机密码（窗口模式用 netcfg.txt 的 secret=）/ 主机端口（给了就不广播）
+// --sim-loss 0.3 / --sim-reorder / --sim-skew 秒 v0.22.0 测试：发出的包随机丢 / 30% 延后 20–200ms（乱序）/ 签名时间戳偏移
+// 可靠事件：游戏写 net\rel_out.txt、读 net\rel_in.txt（Reliable.cs 文件头）
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -38,7 +38,7 @@ using System.Windows.Forms;   // AOT 版（fornet_lobby.dll）里是 Headless.cs
 
 namespace ForNet
 {
-    // §125 只给离线测试用：环境变量 FORNET_LOOPBACK=1 或命令行 --loopback 时所有 UDP 都只绑 127.0.0.1，
+    // 只给离线测试用：环境变量 FORNET_LOOPBACK=1 或命令行 --loopback 时所有 UDP 都只绑 127.0.0.1，
     // 防火墙就不弹"已经阻止此应用的部分功能"；局域网广播也改成发给 127.0.0.1。游戏里的 dll / 玩家开的 exe 不设，照旧绑所有网卡。
     static class NetBind
     {
@@ -60,7 +60,7 @@ namespace ForNet
             throw new SocketException((int)SocketError.AddressAlreadyInUse);
         }
 
-        // §280 IPv6 直连。V6 = false（netcfg.txt 写 ipv6=0、命令行 --no-ipv6、环境变量 FORNET_NO_IPV6=1）时和以前一字不差：只开 IPv4。
+        // IPv6 直连。V6 = false（netcfg.txt 写 ipv6=0、命令行 --no-ipv6、环境变量 FORNET_NO_IPV6=1）时和以前一字不差：只开 IPv4。
         public static volatile bool V6 = WireTag.Env("NO_IPV6") != "1";
         // 回环测试下的 IPv6：FORNET_LOOPBACK=6 或 --loopback6 时主机绑 ::1（只收 IPv6，测 "[::1]:端口" 加入用）
         public static bool Loopback6 = WireTag.Env("LOOPBACK") == "6";
@@ -96,7 +96,7 @@ namespace ForNet
             return u;
         }
 
-        // §327 和大厅服务器说话的小 socket（房间列表 / 数值表 / 观战 / 桥接房登记）：本机端口随便，IPv4 / IPv6 都能发（双栈）。
+        // 和大厅服务器说话的小 socket（房间列表 / 数值表 / 观战 / 桥接房登记）：本机端口随便，IPv4 / IPv6 都能发（双栈）。
         // 回环测试下按要连的服务器的地址族绑 127.0.0.1 或 ::1；IPv6 关了（V6 = false）且服务器是 IPv4 时和以前一样只开 IPv4
         public static UdpClient QueryUdp(IPEndPoint server)
         {
@@ -119,7 +119,7 @@ namespace ForNet
             }
         }
 
-        // §327 这个 socket 能不能往 ep 发（IPv4 socket 只能发 IPv4；IPv6 socket 开了双栈两种都能发；回环的只能发同一族）
+        // 这个 socket 能不能往 ep 发（IPv4 socket 只能发 IPv4；IPv6 socket 开了双栈两种都能发；回环的只能发同一族）
         public static bool CanSend(UdpClient u, IPEndPoint ep)
         {
             if (u == null || ep == null) return false;
@@ -135,7 +135,7 @@ namespace ForNet
             catch (Exception) { return false; }
         }
 
-        // ::ffff:1.2.3.4 → 1.2.3.4（双栈 socket 收到的 IPv4 包）；别的原样
+        // :ffff:1.2.3.4 → 1.2.3.4（双栈 socket 收到的 IPv4 包）；别的原样
         public static IPAddress Norm(IPAddress a) { return a != null && a.IsIPv4MappedToIPv6 ? a.MapToIPv4() : a; }
         public static IPEndPoint Norm(IPEndPoint ep)
         {
@@ -143,7 +143,7 @@ namespace ForNet
         }
     }
 
-    // §122 后台线程的入口一律经过这里：没接住的异常只记日志，不往外抛。
+    // 后台线程的入口一律经过这里：没接住的异常只记日志，不往外抛。
     // exe 里出事只是联机程序退出；联机程序编成 DLL 在游戏进程里跑时（fornet_lobby.dll），没接住的异常会直接结束游戏。
     static class Safe
     {
@@ -227,14 +227,14 @@ namespace ForNet
         public static string F(double v, string fmt) { return v.ToString(fmt, CultureInfo.InvariantCulture); }
     }
 
-    // HANDOVER §72.10：收到的状态包排队写 state_remote.txt，Session.Run 每轮（~4ms）写一个，
+    // 收到的状态包排队写 state_remote.txt，Session.Run 每轮（~4ms）写一个，
     // 一批里一起到的几个包不再只留最新一个。积压超过 Max 个就丢最旧的（状态包是"最新覆盖"，不为补帧攒延迟）
     class RemoteOut
     {
         const int Max = 3;
-        public volatile string Target;   // §85 等人的房间转正时从 net\wait\ 换到 net\（真人离开再换回去）
+        public volatile string Target;   // 等人的房间转正时从 net\wait\ 换到 net\（真人离开再换回去）
         readonly Queue<string> q = new Queue<string>();
-        volatile GamePipe pipe;     // §83 游戏连着管道就交给管道，不写文件；§85 跟着 Retarget 换（只有 net\ 有管道）
+        volatile GamePipe pipe;     // 游戏连着管道就交给管道，不写文件； 跟着 Retarget 换（只有 net\ 有管道）
 
         public RemoteOut(string path) { Retarget(path); }
 
@@ -271,14 +271,14 @@ namespace ForNet
         public PeerTable Peers { get { return peers; } }
         public IPEndPoint Peer { get { return peers.GetPeer<IPEndPoint>(); } set { peers.SetPeer(value, PeerRoute.Direct); } }
         bool lockFirst;
-        bool v6AliasLogged;     // §280 "主机回包换了同网段 IPv6 地址"只记一次
+        bool v6AliasLogged;     // "主机回包换了同网段 IPv6 地址"只记一次
         readonly RemoteOut outq;
         public long Tx, Rx, Stale, Gap;
         public double DelaySum, DelayMax;
         public long DelayN;
         public Action<string> Log = delegate { };
-        public bool Diag;      // §130 写 net\net_conn.log（局域网 / 输入 IP 直连；AI 对战的回环不写）
-        // §141 观战（第 2 步）。主机：握手带 spec=1 的地址记成观战者（不占对战位、不锁定），Session 把两路状态包转给它们；
+        public bool Diag;      // 写 net\net_conn.log（局域网 / 输入 IP 直连；AI 对战的回环不写）
+        // 观战（第 2 步）。主机：握手带 spec=1 的地址记成观战者（不占对战位、不锁定），Session 把两路状态包转给它们；
         // OnPeerState = 收到对手的一个状态包（Session 加 src=c 转发）。观战者：SpecMode = 收主机转来的两路包（src=h / src=c），
         // 两路各有自己的序号，按来源分别去重
         public const int MaxSpec = 4;
@@ -306,7 +306,7 @@ namespace ForNet
             return s.StartsWith(WireTag.P + "HELLO", StringComparison.Ordinal) && s.Contains("\nspec=1");
         }
 
-        // ---- 多人混战（docs/MULTI.md ②a）。主机：握手带 mp=1 的地址记成玩家，编号 2..MpCfg.Max（主机自己是 1），
+        // ---- 多人混战（②a）。主机：握手带 mp=1 的地址记成玩家，编号 2..MpCfg.Max（主机自己是 1），
         // 收到的状态包加 src=<编号> 交给自己的游戏、并经 OnMpState 让 Session 转给其他玩家；每 2 秒给每位玩家发 4NMP（你的编号 / 人数）。
         // 客机：MpMode = 收主机发来的多路包（src=<编号>，按来源分别去重），4NMP 里拿到自己的编号
         public Action<int, string> OnMpState { get; set; }
@@ -316,7 +316,7 @@ namespace ForNet
         internal static string ParseDeniedMsg(string s)
         {
             if (s != null && s.IndexOf("inmatch", StringComparison.Ordinal) >= 0) return L.T("对局进行中，这局打完再进", "Match in progress, join after it ends");
-            if (s != null && s.IndexOf("|full", StringComparison.Ordinal) >= 0) return L.T("房间已满", "Room is full");     // §296
+            if (s != null && s.IndexOf("|full", StringComparison.Ordinal) >= 0) return L.T("房间已满", "Room is full");
             return L.T("房间暂不可加入", "Room cannot be joined right now");
         }
         public volatile int MyPid;               // 客机：主机给的编号（0 = 还没收到）
@@ -349,13 +349,13 @@ namespace ForNet
         public string MpStatsLines()
         {
             return mesh != null ? "\nmpmesh=" + mesh.StatsLine() + "\nmptx=" + mesh.MpTx + "\nmprx=" + mesh.MpRx + "\nmpdual=" + mesh.MpDual
-                + "\nmpfwd=" + mesh.MpFwd + "\nmpdup=" + mesh.MpDup + "\nmpdz=" + mesh.DzStat + "\nmpprobe=" + mesh.ProbeStats() : "";     // §328 mpdz=<在省流 1/0>:<实发字节>/<原样字节>:<拼回包数>:<拼不回丢掉>
+                + "\nmpfwd=" + mesh.MpFwd + "\nmpdup=" + mesh.MpDup + "\nmpdz=" + mesh.DzStat + "\nmpprobe=" + mesh.ProbeStats() : "";     // mpdz=<在省流 1/0>:<实发字节>/<原样字节>:<拼回包数>:<拼不回丢掉>
 
         }
         int meshGot;
 
-        // ---- M4：局域网 / 输入 IP 的 1v1 解说模式直连（M2 的 Steam 那条路的 UDP 版）。
-        // 房主给两位选手发 4NMESH 介绍（对方地址 + 一次性口令），两人同时互发 4NMESHHELLO 打洞；
+        // ---- M4：局域网 / 输入 IP 的 1v1 解说模式直连（M2 的桥接平台那条路的 UDP 版）。
+        // 房主给两位选手发 4N 介绍（对方地址 + 一次性口令），两人同时互发 4NHELLO 打洞；
         // 状态包照旧发给房主（观战 / 兜底），同时给对面直连发一份，seq 相同，接收端按 seq 只收一份。
         IPEndPoint specMeshPeer;
         string specMeshToken = "";
@@ -484,7 +484,7 @@ namespace ForNet
             mesh.EnsureHandle = delegate(int pid, string addr, ulong sid)
             {
                 if (string.IsNullOrEmpty(addr)) return null;
-                return Addr.ParseEp(addr);     // §280 "ip:端口" 和 "[v6]:端口" 都认
+                return Addr.ParseEp(addr);     // "ip:端口" 和 "[v6]:端口" 都认
             };
             mesh.Dedupe = delegate(string src, int seq)
             {
@@ -506,7 +506,7 @@ namespace ForNet
         string LocalAddrFor(IPEndPoint peer)
         {
             int port = LocalPort;
-            bool v6 = peer != null && peer.AddressFamily == AddressFamily.InterNetworkV6;     // §280 按对方的地址族问路由
+            bool v6 = peer != null && peer.AddressFamily == AddressFamily.InterNetworkV6;     // 按对方的地址族问路由
             if (NetBind.Loopback) return new IPEndPoint(v6 ? IPAddress.IPv6Loopback : IPAddress.Loopback, port).ToString();
             if (peer == null)
             {
@@ -532,7 +532,7 @@ namespace ForNet
             return s.StartsWith(WireTag.P + "HELLO", StringComparison.Ordinal) && s.Contains("\nmp=1");
         }
 
-        // §326 多人玩家握手里的 watch=1（§324 观战加入）：房间满了也不为它挤掉 AI（AI 是它要看的对局的一部分）
+        // 多人玩家握手里的 watch=1（观战加入）：房间满了也不为它挤掉 AI（AI 是它要看的对局的一部分）
         internal static bool HelloWatch(string s)
         {
             if (s == null || !s.StartsWith(WireTag.P + "HELLO", StringComparison.Ordinal)) return false;
@@ -540,7 +540,7 @@ namespace ForNet
             return Kv.Parse(s).TryGetValue("watch", out v) && v == "1";
         }
 
-        // §294 多人玩家握手里的 hideip=1（开了"隐藏我的 IP"）
+        // 多人玩家握手里的 hideip=1（开了"隐藏我的 IP"）
         internal static bool HelloHide(string s)
         {
             if (s == null || !s.StartsWith(WireTag.P + "HELLO", StringComparison.Ordinal)) return false;
@@ -555,7 +555,7 @@ namespace ForNet
             string v;
             return Kv.Parse(s).TryGetValue("nm", out v) ? v : "";
         }
-        // §323 多人玩家握手里自己报的公网 IPv6 端点
+        // 多人玩家握手里自己报的公网 IPv6 端点
         internal static string HelloV6(string s)
         {
             if (s == null || !s.StartsWith(WireTag.P + "HELLO", StringComparison.Ordinal)) return "";
@@ -643,17 +643,17 @@ namespace ForNet
                 }
                 return true;
             }
-            if (hello && mesh != null && mesh.IsHost && !HelloWatch(s)) mesh.TryYieldAiForHuman(MpCfg.Max);     // §326 观战加入不挤 AI
+            if (hello && mesh != null && mesh.IsHost && !HelloWatch(s)) mesh.TryYieldAiForHuman(MpCfg.Max);     // 观战加入不挤 AI
             var extraUsed = mesh != null ? mesh.Pids() : null;
-            if (extraUsed != null && mesh.MyPid > 0) extraUsed.Add(mesh.MyPid);     // §305 不再写死占住 1 号：换房主后走掉的 1 号可以补给新人（mesh.Pids() 里还在的成员照样占着）
+            if (extraUsed != null && mesh.MyPid > 0) extraUsed.Add(mesh.MyPid);     // 不再写死占住 1 号：换房主后走掉的 1 号可以补给新人（mesh.Pids 里还在的成员照样占着）
             int r = peers.NoteMp(from, hello, MpCfg.Max, MpCfg.Cap, MpCfg.Lost, out p, extraUsed, existingPid);
             if (r == 0)
             {
                 // 多人房间不收 1v1 对手：没编号的人（满员时来的）发来的状态包 / 普通握手吞掉，别被锁成对手；观战握手照旧交给观战
-                if (mesh != null && !IsSpecHello(s)) mesh.TellOldClient(from, s);     // §321 旧版 1v1 握手：回版本号，让它显示"版本不一致，建议更新"
+                if (mesh != null && !IsSpecHello(s)) mesh.TellOldClient(from, s);     // 旧版 1v1 握手：回版本号，让它显示"版本不一致，建议更新"
                 return !IsSpecHello(s) && (s.Contains("seq=") || s.StartsWith(WireTag.P + "HELLO", StringComparison.Ordinal));
             }
-            if (r < 0) { MpRefused++; if (hello && mesh != null) mesh.DuelRefuseFull(from); return true; }     // §311 对决模式满了明说；普通多人房满了不回绝：握手留着，有人走了就补上（M3，test_mp_lobby；§298.2）
+            if (r < 0) { MpRefused++; if (hello && mesh != null) mesh.DuelRefuseFull(from); return true; }     // 对决模式满了明说；普通多人房满了不回绝：握手留着，有人走了就补上（M3，test_mp_lobby）
             if (r == 2)
             {
                 Log(L.T("多人：玩家加入，编号 ", "Multi: player joined, id ") + p.Pid + " " + from);
@@ -661,9 +661,9 @@ namespace ForNet
                 if (mesh != null)
                 {
                     mesh.HostAddr = LocalAddrFor(from);
-                    mesh.HostAddrOf = h => { var hep = h as IPEndPoint; return hep != null ? LocalAddrFor(hep) : null; };     // §280 按玩家的地址族
+                    mesh.HostAddrOf = h => { var hep = h as IPEndPoint; return hep != null ? LocalAddrFor(hep) : null; };     // 按玩家的地址族
                     mesh.AddPlayer(p.Pid, from, from.ToString(), p.BridgeId, p.Nick, HelloLan(s), HelloHide(s), HelloV6(s));
-                    mesh.MyV6Addr = MpMesh.V6Ep(LocalPort);     // §323 房主介绍自己时带上
+                    mesh.MyV6Addr = MpMesh.V6Ep(LocalPort);     // 房主介绍自己时带上
                     mesh.SendIntros(DateTime.UtcNow, true);
                 }
                 SendMpInfo();
@@ -715,7 +715,7 @@ namespace ForNet
         }
 
         // 观战者的握手 / 保活：记下（满了不收）。返回 true = 这个包是观战者的，不再往下处理
-        // §223.4 观战者会不会拼省流包（握手带 dzv=1）
+        // 观战者会不会拼省流包（握手带 dzv=1）
         public bool SpecDzAll { get { return peers.SpecDzAll; } }
 
         bool NoteSpec(IPEndPoint from, string s)
@@ -731,10 +731,10 @@ namespace ForNet
             return true;
         }
 
-        // §141.7 对手位让给队首：返回顶上来的地址（没人排队 = null）。刚下场的那个跳过（自己下去观战的不会马上又被叫上来）
+        // 对手位让给队首：返回顶上来的地址（没人排队 = null）。刚下场的那个跳过（自己下去观战的不会马上又被叫上来）
         DateTime promotedAt = DateTime.MinValue;
 
-        // ---- §141.8 主机下场：第二位选手
+        // ---- 主机下场：第二位选手
         public IPEndPoint Peer2 { get { return peers.GetSecond<IPEndPoint>(); } set { peers.SetSecond(value, PeerRoute.Direct, 0UL); } }
         public Action<string> OnSecondState { get; set; }
         public bool NoOut { get; set; }
@@ -778,7 +778,7 @@ namespace ForNet
             return head;
         }
 
-        // §141.7 打完换人：现在的对手下场，排到队尾当观战者。返回下场的地址
+        // 打完换人：现在的对手下场，排到队尾当观战者。返回下场的地址
         public IPEndPoint DemotePeer()
         {
             var r = peers.DemotePeer();
@@ -819,7 +819,7 @@ namespace ForNet
             outq = new RemoteOut(fRemote);
             Peer = peer;
             lockFirst = peer == null;
-            Udp = NetBind.SessionUdp(port, peer);     // §280 双栈：同一个端口收 IPv4 + IPv6
+            Udp = NetBind.SessionUdp(port, peer);     // 双栈：同一个端口收 IPv4 + IPv6
             // 对方端口还没开时 Windows 会把 ICMP 端口不可达报成下一次 Receive 的异常，关掉这个行为
             try { Udp.Client.IOControl(-1744830452, new byte[] { 0, 0, 0, 0 }, null); } catch (Exception) { }
         }
@@ -832,7 +832,7 @@ namespace ForNet
             get
             {
                 var s = LocalEndpoint;
-                var ep = Addr.ParseEp(s);     // §280 IPv6 是 "[v6]:端口"
+                var ep = Addr.ParseEp(s);     // IPv6 是 "[v6]:端口"
                 if (ep == null || IPAddress.IsLoopback(ep.Address) || ep.Address.IsIPv6LinkLocal
                     || ep.Address.Equals(IPAddress.Any) || ep.Address.Equals(IPAddress.IPv6Any)) return "";
                 return s;
@@ -862,7 +862,7 @@ namespace ForNet
                 return true;
             }
             if (!mesh.HostConfirmed) return true;
-            if (!MpCfg.MidJoin && mesh.MpInMatch && !mesh.DuelOn)     // §322 对局中也收
+            if (!MpCfg.MidJoin && mesh.MpInMatch && !mesh.DuelOn)     // 对局中也收
             {
                 MpRefused++;
                 var rej = wire.Seal(WireTag.P + "BUSY|inmatch\n");
@@ -876,7 +876,7 @@ namespace ForNet
                 try { Udp.Send(rej, rej.Length, from); } catch (Exception) { }
                 return true;
             }
-            // §298.2 满了也转给房主：房主那边握手留着、有人走了就补上（不在成员这里回绝）
+            // 满了也转给房主：房主那边握手留着、有人走了就补上（不在成员这里回绝）
             if (mesh.IsHostHidden()) return true;
             string hostEp = LocalAddrForHost(mesh.HostPid);
             if (string.IsNullOrEmpty(hostEp) || Addr.ParseEp(hostEp) == null) return true;
@@ -907,7 +907,7 @@ namespace ForNet
         }
         public void Close()
         {
-            if (mesh != null && mesh.MyPid > 0)     // §297 成员也告别（只告诉房主）
+            if (mesh != null && mesh.MyPid > 0)     // 成员也告别（只告诉房主）
             {
                 mesh.BroadcastBye();
                 try { Thread.Sleep(30); } catch (Exception) { }
@@ -924,7 +924,7 @@ namespace ForNet
             try { Udp.Send(b, b.Length, p); } catch (Exception) { }
         }
 
-        // §130 诊断里只记包的种类，不记内容
+        // 诊断里只记包的种类，不记内容
         internal static string Head(string s)
         {
             if (s.StartsWith(WireTag.P + "HELLO", StringComparison.Ordinal)) return "握手";
@@ -951,12 +951,12 @@ namespace ForNet
                 IPEndPoint from = null;
                 byte[] data;
                 try { data = Udp.Receive(ref from); } catch (Exception) { break; }
-                from = NetBind.Norm(from);     // §280 双栈 socket 收到的 IPv4 包是 ::ffff:a.b.c.d，还原成 IPv4 再比较
+                from = NetBind.Norm(from);     // 双栈 socket 收到的 IPv4 包是 ::ffff:a.b.c.d，还原成 IPv4 再比较
                 // v0.22.0：先验签再锁定对端，设了密码时伪造的包抢不走主机
                 var to = from;
                 var s = wire.Verify(data, 0, data.Length, b => { try { Udp.Send(b, b.Length, to); } catch (Exception) { } });
                 if (s == null) continue;
-                // §280 客机连的是主机的 IPv6 地址：主机回包时系统可能挑同一网段的另一个地址当源地址（Windows 的临时地址），
+                // 客机连的是主机的 IPv6 地址：主机回包时系统可能挑同一网段的另一个地址当源地址（Windows 的临时地址），
                 // 同网段（前 64 位）+ 同端口的包当成主机发的（发还是发给填的那个地址，主机哪个地址都收）
                 if (!lockFirst)
                 {
@@ -1013,7 +1013,7 @@ namespace ForNet
                 if (!lockFirst && TryMemberRefer(from, s)) continue;
                 // 多人混战：玩家的握手 / 状态包（不锁定、不占 1v1 的对手位）
                 if (lockFirst && NoteMp(from, s)) continue;
-                // §141.8 第二位选手的包：状态包交给 Session 转发；握手 / 可靠事件不进主机的可靠通道（它只认第一位）
+                // 第二位选手的包：状态包交给 Session 转发；握手 / 可靠事件不进主机的可靠通道（它只认第一位）
                 var p2 = Peer2;
                 if (lockFirst && p2 != null && from.Equals(p2))
                 {
@@ -1040,7 +1040,7 @@ namespace ForNet
                     if (cb2 != null) cb2(s);
                     continue;
                 }
-                // §141 主机：观战者的握手 / 保活不锁定、不占对战位（对手本人发来的不算）
+                // 主机：观战者的握手 / 保活不锁定、不占对战位（对手本人发来的不算）
                 var curPeer = Peer;
                 if (lockFirst && !from.Equals(curPeer))
                 {
@@ -1063,7 +1063,7 @@ namespace ForNet
                     peers.NoteSpec(from, WireTag.P + "HELLO\nspec=1\n", SpecCfg.Max, 0UL);
                     continue;
                 }
-                // §141.7 对手自己说要下去观战（发来观战握手）：下场排到队尾
+                // 对手自己说要下去观战（发来观战握手）：下场排到队尾
                 // 刚叫上场的人在收到 4NROLE 之前还会发几个观战握手：上场后 PromoteGrace 秒内的不算
                 if (lockFirst && curPeer != null && from.Equals(curPeer) && IsSpecHello(s))
                 {
@@ -1083,21 +1083,21 @@ namespace ForNet
                     curPeer = from;
                 }
                 if (curPeer != null && !from.Equals(curPeer)) continue;
-                // M4：房主介绍另一位选手（局域网 / 输入 IP 的解说房直连）。双方互发 4NMESHHELLO 打洞。
+                // M4：房主介绍另一位选手（局域网 / 输入 IP 的解说房直连）。双方互发 4NHELLO 打洞。
                 if (!lockFirst && s.StartsWith(WireTag.P + "MESH\n", StringComparison.Ordinal))
                 {
                     var qm = Kv.Parse(s);
                     string pv, tv, mhv;
                     if (qm.TryGetValue("peer", out pv))
                     {
-                        var ep = Addr.ParseDirect(pv, Session.GamePort);     // §280 IPv6 房间里介绍来的是 "[v6]:端口"
+                        var ep = Addr.ParseDirect(pv, Session.GamePort);     // IPv6 房间里介绍来的是 "[v6]:端口"
                         if (ep != null)
                             MeshIntro(ep, qm.TryGetValue("token", out tv) ? tv : "",
                                       qm.TryGetValue("matchhost", out mhv) && mhv == "1");
                     }
                     continue;
                 }
-                // §141.7 主机发来的换角色 / 排队位置（只认主机：观战者 / 客机的 Peer 就是主机）
+                // 主机发来的换角色 / 排队位置（只认主机：观战者 / 客机的 Peer 就是主机）
                 if (!lockFirst && s.StartsWith(WireTag.P + "ROLE", StringComparison.Ordinal))
                 {
                     var q = Kv.Parse(s);
@@ -1148,7 +1148,7 @@ namespace ForNet
                 int gap;
                 if ((SpecMode || MpMode) && d.TryGetValue("src", out src))
                 {
-                    // §141 观战者：主机 / 对手两路包各自的序号；多人混战的客机：每个编号一路
+                    // 观战者：主机 / 对手两路包各自的序号；多人混战的客机：每个编号一路
                     if (!peers.TakeSrcSeq(src, seq, out gap)) { Stale++; continue; }
                     Gap += gap;
                     if (src == "h") SrcH++; else SrcC++;
@@ -1169,7 +1169,7 @@ namespace ForNet
                     if (delay > DelayMax) DelayMax = delay;
                 }
                 newest = s;
-                if (!SpecMode) wire.DzSeenText(s);      // §223.6 认定是对手的状态包了：算对方会不会拼省流包
+                if (!SpecMode) wire.DzSeenText(s);      // 认定是对手的状态包了：算对方会不会拼省流包
                 if (!NoOut) outq.Push(s);
                 var fw = OnPeerState;
                 if (fw != null && !SpecMode) fw(s);
@@ -1185,13 +1185,13 @@ namespace ForNet
     {
         public const int GamePort = 27015, DiscoveryPort = 27016, PollMs = 4;
         public static int BroadcastPort = DiscoveryPort;
-        public static int ClientBindPort;     // §286 测试用（--client-port）：客机固定本地端口；平时 0 = 系统随便给
+        public static int ClientBindPort;     // 测试用（--client-port）：客机固定本地端口；平时 0 = 系统随便给
         public readonly string Name, Mode;
         volatile string role;
-        public string Role { get { return role; } }     // §141.7 观战者 ↔ 客机会在会话里换（轮到上场 / 下场观战）
+        public string Role { get { return role; } }     // 观战者 ↔ 客机会在会话里换（轮到上场 / 下场观战）
         public readonly ITransport T;
         volatile string fLocal, fSession;
-        volatile string retargetTo;     // §85 等人的房间转正：Run 线程里换目录
+        volatile string retargetTo;     // 等人的房间转正：Run 线程里换目录
         readonly IPEndPoint enteredPeer;
         readonly bool allowBroadcast, doBackup;
         volatile bool broadcast, bcastReset;
@@ -1203,7 +1203,7 @@ namespace ForNet
         public long RxSeen, Loops, SendLoops;   // Run / SendLoop 各转了几轮（命令行日志里算"轮询 X 次/秒"）
         public volatile string LocalMap = "?";
         public volatile string RemoteMap = "?";
-        // §110 武林盟主：自己的排位 pid（发包时加 rk=，对方据此上报"和谁打的"）；null = 不是排位房间。
+        // 排位：自己的排位 pid（发包时加 rk=，对方据此上报"和谁打的"）；null = 不是排位房间。
         // LocalMt / LocalQuit = 本机游戏状态包里的 mt= / quit=（主机看自己的 mt= 判开局 / 打完，客机看自己的 quit= 判弃权）
         public volatile string RankPid, LocalMt, LocalQuit;
         public volatile string MpTag = "m=elim;tm=0;st=idle";
@@ -1262,26 +1262,26 @@ namespace ForNet
             if ((Mode == "bridge" || bl != null) && Role == "host" && MpCfg.Max >= 2)
             {
                 int cur = (bl != null ? bl.MpCount + 1 : 1);
-                Bridge.SetHosting(true, MpMesh.Hosting(bl != null ? bl.Mesh : null, cur, MpCfg.Max, tag));     // §326.4
+                Bridge.SetHosting(true, MpMesh.Hosting(bl != null ? bl.Mesh : null, cur, MpCfg.Max, tag));
             }
         }
         static int serialSeq;
         public readonly int Serial = System.Threading.Interlocked.Increment(ref serialSeq);     // F4c-3：会话序号，排位插件据此认"同一个联机"（以前是 ReferenceEquals）
-        public volatile string LocalRfp;       // §210 规则指纹：本机状态包的 rfp=<局号>:<指纹>（"-" = 没有），排位时报给服务器
-        public volatile string LocalRkd;       // §179.3 武林盟主客机复核：本机状态包的 rkd=<局号>:<对不上的次数>（"-" = 没有）
-        public IMatchStats Stats;     // §110.11 排位房间：本机每个状态包的武器 / 影之武装 / 放招记进去（F4c-1：接口）
+        public volatile string LocalRfp;       // 规则指纹：本机状态包的 rfp=<局号>:<指纹>（"-" = 没有），排位时报给服务器
+        public volatile string LocalRkd;       // 排位客机复核：本机状态包的 rkd=<局号>:<对不上的次数>（"-" = 没有）
+        public IMatchStats Stats;     // 排位房间：本机每个状态包的武器 / 影之武装 / 放招记进去（F4c-1：接口）
         public Action<string> Log = delegate { };
         readonly HashSet<string> backedUp = new HashSet<string>();
         public readonly Wire Wire;            // v0.22.0 包签名（Reliable.cs）
         public readonly RelChannel Rel;       // v0.22.0 可靠事件通道
         readonly SimNet sim = new SimNet();
-        // §130 连接诊断（net\net_conn.log）：服务器大厅 / 输入 IP 直连 / 局域网写；Steam 有自己的 steam_conn.log，AI 对战不写
+        // 连接诊断（net\net_conn.log）：服务器大厅 / 输入 IP 直连 / 局域网写；桥接平台有自己的 steam_conn.log，AI 对战不写
         readonly bool diag;
         DateTime startedAt, connAt = DateTime.MinValue, lostAt = DateTime.MinValue;
         bool wasConn, helloLogged;
         string lastHint = "", lastPeerApp;
 
-        // UDP：peer = null 当主机（监听 port），否则连 peer；t 不为空时用它（Steam）。mode = steam | lan | server（server 只在"输入 IP 直连"的客机走这里）
+        // UDP：peer = null 当主机（监听 port），否则连 peer；t 不为空时用它（桥接平台）。mode = 桥接平台 | lan | server（server 只在"输入 IP 直连"的客机走这里）
         public Session(string role, IPEndPoint peer, string name, string dir, bool doBackup)
             : this(role, "lan", null, peer, GamePort, name, dir, doBackup, null) { }
 
@@ -1307,15 +1307,15 @@ namespace ForNet
                 st0.OnDeliverPeerEvent = HandlePeerEvent;
                 st0.OnRoleEx = (r, mh) => { wantRole = r; wantMatchHost = mh; };
             }
-            // §141 观战：主机把对手的包加 src=c 转给观战者；观战者（role = spec）只收不发状态包
+            // 观战：主机把对手的包加 src=c 转给观战者；观战者（role = spec）只收不发状态包
             var ss0 = T as ISpecSink;
             if (ss0 != null && role == "host") ss0.OnPeerState = body => { if (RelayOn) RelayForward(body, true); else ForwardSpec(body, "c"); };
             var rh0 = T as IRelayHost;
             if (rh0 != null && role == "host") rh0.OnSecondState = body => { secondRx++; if (RelayOn) RelayForward(body, false); };
             if (ss0 != null && role == "spec") ss0.SpecMode = true;
             if (ss0 != null && role != "host") ss0.OnRole = r => wantRole = r;
-            // 局域网 / 虚拟局域网才广播房间（广域网的朋友收不到广播；Steam 用富状态）
-            // 测试给了 --lan-port（不是 27015）时默认不广播，免得开着的游戏的房间列表里冒出测试房间（§85.5）；若同时改了 --disc-port 则照常广播到该端口
+            // 局域网 / 虚拟局域网才广播房间（广域网的朋友收不到广播；桥接平台用富状态）
+            // 测试给了 --lan-port（不是 27015）时默认不广播，免得开着的游戏的房间列表里冒出测试房间；若同时改了 --disc-port 则照常广播到该端口
             allowBroadcast = mode == "lan" && T is Link && (port == GamePort || BroadcastPort != DiscoveryPort);
             broadcast = role == "host" && allowBroadcast;
             this.doBackup = doBackup;
@@ -1324,7 +1324,7 @@ namespace ForNet
             var slw0 = T as ServerLink;
             if (slw0 != null)
             {
-                // §240 服务器自己开的房：服务器发角色（含 matchhost）、聊天和捡道具结果
+                // 服务器自己开的房：服务器发角色（含 matchhost）、聊天和捡道具结果
                 slw0.OnRoleEx = (r, mh) => { wantRole = r; wantMatchHost = mh; };
                 slw0.OnServerEvent = ev => Rel.DeliverLocal(ev);
             }
@@ -1381,7 +1381,7 @@ namespace ForNet
                             if (Peers.SecondRow.Rel != null) Peers.SecondRow.Rel.Send(data);
                         }
                     }
-                    // §295 全互连多人房：房主的数值表块（cfg）和这一场的规则整串（rfpx）发给全房（以前只到 1v1 的第二位，多人里谁都收不到）
+                    // 全互连多人房：房主的数值表块（cfg）和这一场的规则整串（rfpx）发给全房（以前只到 1v1 的第二位，多人里谁都收不到）
                     if (data.StartsWith("cfg ") || data.StartsWith("rfpx "))
                     {
                         var mlkAll = T as IMpLink;
@@ -1390,11 +1390,11 @@ namespace ForNet
                 }
             };
             T.Wire = Wire;
-            if (role == "host") Wire.Gate = Blacklist.DeniesBody;     // §174
+            if (role == "host") Wire.Gate = Blacklist.DeniesBody;
             diag = mode != "ai" && !Modes.IsBridge(mode);
             var lk = T as Link;
             if (lk != null) lk.Diag = diag;
-            // 多人混战（docs/MULTI.md ②a）：主机把每位玩家的包转给其他玩家；客机按多人加入（局域网 / 输入 IP / Steam）
+            // 多人混战（②a）：主机把每位玩家的包转给其他玩家；客机按多人加入（局域网 / 输入 IP / 桥接平台）
             if (lk != null && role == "host") lk.OnMpState = (pid, tagged) => { lock (sendLock) lk.SendMp(Wire.Seal(tagged), pid); };
             var mlink = T as IMpLink;
             MpJoin = mlink != null && role == "client" && MpCfg.Join;
@@ -1723,7 +1723,7 @@ namespace ForNet
                     var botLoad = load != null ? load.Clone() : (s.mpAiLoad != null ? s.mpAiLoad.Clone() : LocalAiSupport.NewLoad());
                     var bot = LocalAiSupport.CreateMp(nextPid, nick, level, botLoad);
                     if (bot == null) break;
-                    // §335 也喂给别的 AI（以前 AI 只看得见真人，找不到别队的 AI 当目标）；OnState 在 AI 线程锁外调，不会互锁
+                    // 也喂给别的 AI（以前 AI 只看得见真人，找不到别队的 AI 当目标）；OnState 在 AI 线程锁外调，不会互锁
                     bot.OnState = delegate(int aiPid, string body) { mesh.BroadcastAiState(aiPid, body); s.FeedMpAi(aiPid, body); };
                     bot.Log = delegate(string msg) { if (s.Log != null) s.Log(msg); };
                     s.mpBots[nextPid] = bot;
@@ -1759,7 +1759,7 @@ namespace ForNet
             }
             return true;
         }
-        // §306 房主在房间里改人数上限（Lua 面板"房间人数"，命令 mpsize n=）。§316 可以低于现在的人数：已经进来的人不赶，
+        // 房主在房间里改人数上限（Lua 面板"房间人数"，命令 mpsize n=）。 可以低于现在的人数：已经进来的人不赶，
         // 但走了的人要等人数降到上限以下才能再进（Mesh.NoteMp 按人头数挡）；
         // 不高于 MpCfg.Limit。11-15 用户（"新版 1v1 和其他模式的人数上限要同步，不然 1v1 这边 18 人、切换模式不就炸了"）：对决模式也走这里，
         // 和其他玩法同一个上限、观众上限 = 人数 − 2（DuelCmdOn）；Lua 切玩法后把同一个"房间人数"再发一遍。改完：编号分配（MpCfg.Max / 网状 MpMax）、
@@ -1773,9 +1773,9 @@ namespace ForNet
                 return false;
             }
             bool duel = mh.Mesh.DuelOn;
-            int want = Math.Max(2, Math.Min(n, MpCfg.Limit));     // §316 不再抬到现在的人数；11-15 对决同一个上限
+            int want = Math.Max(2, Math.Min(n, MpCfg.Limit));     // 不再抬到现在的人数；11-15 对决同一个上限
             if (duel) mh.Mesh.DuelCmdOn(true, want - 2);     // 11-15 对决：2 位选手 + 观众
-            // 调小上限时按真人优先先裁掉最高编号 AI（仍不足再由 §316 按人头数拦新人）
+            // 调小上限时按真人优先先裁掉最高编号 AI（仍不足再由 按人头数拦新人）
             int humanTotal = 1 + mh.Mesh.HumanPeerCount();
             int maxAiKeep = Math.Max(0, want - humanTotal);
             lock (s.mpAiLock) { if (s.wantMpAiCount > want - 1) s.wantMpAiCount = Math.Max(0, want - 1); }
@@ -1865,7 +1865,7 @@ namespace ForNet
             if (mh == null || Role != "host" || MpCfg.Max < 2 || (now - lastMpInfo).TotalSeconds < 2.0) return;
             lastMpInfo = now;
             lock (sendLock) mh.SendMpInfo();
-            // §306 桥接好友页的"人数/上限"以前只在对局状态（mptag）变时才更新，有人进出不变 → 好友看到的人数一直是开房时的 1。
+            // 桥接好友页的"人数/上限"以前只在对局状态（mptag）变时才更新，有人进出不变 → 好友看到的人数一直是开房时的 1。
             // 名单广播（2 秒一次）时顺带核对，变了才重发富状态
             var blk = T as BridgeLink;
             if (blk != null)
@@ -1932,7 +1932,7 @@ namespace ForNet
                 foreach (var p in players) sb.Append(p.Key).Append(':').Append(p.Value.Replace(",", " ").Replace(":", " ")).Append(',');
                 return "\nmp=1\nmpid=" + mh.Mesh.MyPid + "\nmpn=" + (players.Count + 1) + "\nmpmax=" + MpCfg.Max + "\nmpl=" + sb.ToString().TrimEnd(',') + aiExtra + hostExtra + mesh + mh.Mesh.DuelLines() + refExtra;
             }
-            if (MpJoin) return "\nmp=1\nmpid=" + mh.MyPid + "\nmpn=" + mh.MpSeen + "\nmpmax=0\nmpl=" + mh.MpRoster + aiExtra + hostExtra + mesh + mh.Mesh.DuelLines() + refExtra + (MpCfg.JoinWatch ? "\nmpwatch=1" : "");     // §324
+            if (MpJoin) return "\nmp=1\nmpid=" + mh.MyPid + "\nmpn=" + mh.MpSeen + "\nmpmax=0\nmpl=" + mh.MpRoster + aiExtra + hostExtra + mesh + mh.Mesh.DuelLines() + refExtra + (MpCfg.JoinWatch ? "\nmpwatch=1" : "");
             return "";
         }
 
@@ -1950,7 +1950,7 @@ namespace ForNet
         // Session 发出的包都走这里：签名 → （测试时的坏网络）→ 传输
         void SendText(string body) { lock (sendLock) sim.Send(Wire.Seal(DzOut(body)), T.Send); }
 
-        // §223.4 对战状态包省流（Transport.cs DzCfg / DzIn 的说明）：带上 dzv / dzk（主机再带 dzh），对方会拼、主机开着才编码
+        // 对战状态包省流（Transport.cs DzCfg / DzIn 的说明）：带上 dzv / dzk（主机再带 dzh），对方会拼、主机开着才编码
         SpecDelta dzOut;
         Func<string, bool, SpecDelta> dzOutHook;
         Action dzResetHook;
@@ -1984,7 +1984,7 @@ namespace ForNet
             return enc.IndexOf("dz=1\n", StringComparison.Ordinal) >= 0 ? enc + "dzk=" + Wire.DzKey + "\n" : enc;
         }
 
-        // §223.4 主机下场时转给选手的包：收的那位会拼（它自己的包带 dzv=1）、主机开着才省流。key = 这一路的发送方编号
+        // 主机下场时转给选手的包：收的那位会拼（它自己的包带 dzv=1）、主机开着才省流。key = 这一路的发送方编号
         readonly Dictionary<string, SpecDelta> relayDz = new Dictionary<string, SpecDelta>();
         volatile bool relayDzFirst, relayDzSecond;
         // 换人（主机下场 / 回来、补第二位、第二位顶上、打完换人）：新来的那位可能是旧版、也没有拼包的底 → 先发完整包，等他的包到了再算
@@ -2002,17 +2002,17 @@ namespace ForNet
             return enc.IndexOf("dz=1\n", StringComparison.Ordinal) >= 0 ? enc + "dzk=" + key + "\n" : enc;
         }
 
-        // §141 主机：一个状态包加上来源（h = 主机自己，c = 对手）签名后发给每个观战者；没有观战者不做
-        // §141 主机和本地 AI 对打、同时开着等人的房间：AI 会话的两路包（主机 = h、AI = c）交给等人房间的观战者
+        // 主机：一个状态包加上来源（h = 主机自己，c = 对手）签名后发给每个观战者；没有观战者不做
+        // 主机和本地 AI 对打、同时开着等人的房间：AI 会话的两路包（主机 = h、AI = c）交给等人房间的观战者
         public volatile Session SpecRelay;
-        // §141 这个会话是"AI 对战时等人的房间"：房间列表里多一行"观战 AI 对战"（局域网广播第 7 段 / 服务器 REG 第 14 段）
+        // 这个会话是"AI 对战时等人的房间"：房间列表里多一行"观战 AI 对战"（局域网广播第 7 段 / 服务器 REG 第 14 段）
         public volatile bool AiWaiting;
         public void ForwardSpecFrom(string body, string src) { ForwardSpec(body, src); }
 
         readonly PeerTable fallbackPeers = new PeerTable();
         PeerTable Peers { get { var h = T as IPeerTableHost; return h != null ? h.Peers : fallbackPeers; } }
 
-        // §223.3 每一路（h = 主机 / c = 对手）一个省流编码器（SpecDelta，存进 PeerTable）
+        // 每一路（h = 主机 / c = 对手）一个省流编码器（SpecDelta，存进 PeerTable）
         void ForwardSpec(string body, string src)
         {
             var relay = SpecRelay;
@@ -2021,7 +2021,7 @@ namespace ForNet
             if (ss == null || ss.SpecCount == 0) return;
             lock (sendLock)
             {
-                // §223.4 主机关了联机省流，或者有观战者是旧版（握手 / WATCH 没带 dz）：都发完整包（去掉旧的 src= 再加）；切回来时编码器从全量重来
+                // 主机关了联机省流，或者有观战者是旧版（握手 / WATCH 没带 dz）：都发完整包（去掉旧的 src= 再加）；切回来时编码器从全量重来
                 if (!DzCfg.On || !ss.SpecDzAll)
                 {
                     Peers.ResetSpecStreamDz(src);
@@ -2058,7 +2058,7 @@ namespace ForNet
             }
         }
 
-        // §141.7 排队。主机：对手掉线 FillAfter 秒、有人排队 → 队首上场；游戏打完一场按房间规矩发 rotate → 对手下场排队尾、队首上场。
+        // 排队。主机：对手掉线 FillAfter 秒、有人排队 → 队首上场；游戏打完一场按房间规矩发 rotate → 对手下场排队尾、队首上场。
         // 换角色的 4NROLE 每 0.5 秒重发，直到对方照新角色发包（上场的发状态包 / 下场的发 spec=1 握手），最多 RoleRetry 秒
         public const double FillAfter = 4.0, RoleRetry = 6.0;
         volatile string wantRole;                   // 观战者 / 客机：主机让换成的角色（Run 线程里换）
@@ -2066,12 +2066,12 @@ namespace ForNet
         public volatile bool MatchHost;
         public volatile string RoomRulesStr;
         DateTime lastHostSpecKeepalive;
-        object roleTo, roleTo2;                     // 主机：正在通知上场的 / 下场的（IP 端点或 Steam 连接句柄）
+        object roleTo, roleTo2;                     // 主机：正在通知上场的 / 下场的（IP 端点或 桥接连接句柄）
         DateTime roleAt, roleSentAt, lastQ;
         public volatile string QueueMsg = "";       // 给面板：最近一次换人
         long rxAtPromote;
 
-        // ---- §141.8 主机下场：两位选手经主机互相转发，主机自己观战（游戏收到 src=h 第一位 / src=c 第二位）。
+        // ---- 主机下场：两位选手经主机互相转发，主机自己观战（游戏收到 src=h 第一位 / src=c 第二位）。
         // 转发给对面选手时序号改成主机自己的（两边看到的序号一直往上走），房间规矩字段换成主机的（两位都是客机，按"主机"的规矩打）。
         // 可靠事件（聊天 / 回合结果）不转：对局流程靠状态包里的 mt= / dead= / quit= 就能走
         public volatile bool RelayOn;
@@ -2201,7 +2201,7 @@ namespace ForNet
 
         public void BroadcastChat(string nick, string text, int exceptPid = 0, int fromPid = 0)
         {
-            // §293.1 对决控制消息（新版 1v1 借房内聊天的可靠通道）：房主在这里盖上发送人的真编号（@duel@<编号>:），
+            // 对决控制消息（新版 1v1 借房内聊天的可靠通道）：房主在这里盖上发送人的真编号（@duel@<编号>:），
             // 游戏按编号认房主 / 本人；别人自己写的 @duel@ 一律丢（冒充）
             if (text != null && text.StartsWith("@duel@", StringComparison.Ordinal)) return;
             if (text != null && text.StartsWith("@duel:", StringComparison.Ordinal))
@@ -2250,10 +2250,10 @@ namespace ForNet
             if (rh == null) return;
             var side = fromFirst ? "h" : "c";
             ForwardSpec(body, side);
-            // §141.8 普通"主机下场"：转发给对面时序号换成主机自己的（relaySeq 从 100000 往上）。
+            // 普通"主机下场"：转发给对面时序号换成主机自己的（relaySeq 从 100000 往上）。
             // 换人后新选手的 seq 从头数，照原样转过去对面会看到序号倒退（联机程序把 100 以内倒退当旧包丢掉，
             // 游戏脚本把大幅倒退当对方重启）。只有解说模式（两位选手之间还有一条直连，两份包同一个 seq 要去重）
-            // 和全互连（M3）才保留原 seq；M4 之前无条件保留是个回归，§240 修。
+            // 和全互连（M3）才保留原 seq；M4 之前无条件保留是个回归， 修。
             var lkSeq = T as Link;
             bool keepSeq = HostSpecCfg.On || (lkSeq != null && lkSeq.SpecMeshUp);
             var strip = new StringBuilder();
@@ -2272,17 +2272,17 @@ namespace ForNet
                 if (raw.Length == 0) continue;
                 int eq = raw.IndexOf('=');
                 var k = eq > 0 ? raw.Substring(0, eq) : raw;
-                if (k == "dzv" || k == "dzk" || k == "dzh") continue;     // §223.4 转发的不带原发送方的省流标记（转出去的是完整包）
+                if (k == "dzv" || k == "dzk" || k == "dzh") continue;     // 转发的不带原发送方的省流标记（转出去的是完整包）
                 string hv;
                 lock (hostRules) if (hostRules.TryGetValue(k, out hv)) { sb.Append(k).Append('=').Append(hv).Append('\n'); continue; }
                 sb.Append(raw).Append('\n');
             }
             // 解说模式 / 直连在用时保留原 seq（见上）；普通主机下场换成主机自己的序号流
             if (!keepSeq) sb.Append("seq=").Append(System.Threading.Interlocked.Increment(ref relaySeq)).Append('\n');
-            // §276（移植 0.33 分支 §269.1）普通"主机下场"两位都是客机，以前谁都不开局：给第一位带 rly=h，它代主机开局 / 判回合；第二位 rly=c。
+            // （移植 0.33 分支）普通"主机下场"两位都是客机，以前谁都不开局：给第一位带 rly=h，它代主机开局 / 判回合；第二位 rly=c。
             // 解说模式不带：那边 4NROLE matchhost=1 已经让第一位当对局主机，且两位之间有直连、直连的包没有 rly
             if (!HostSpecCfg.On) sb.Append("rly=").Append(fromFirst ? "c" : "h").Append('\n');
-            // §223.4 这位选手会不会拼省流包（看他自己发来的包），转给对面那位时按对面那位的
+            // 这位选手会不会拼省流包（看他自己发来的包），转给对面那位时按对面那位的
             bool dzv = body.IndexOf("\ndzv=1", StringComparison.Ordinal) >= 0 || body.StartsWith("dzv=1", StringComparison.Ordinal);
             Peers.SetFighterDz(fromFirst, dzv);
             if (fromFirst) relayDzFirst = dzv; else relayDzSecond = dzv;
@@ -2468,7 +2468,7 @@ namespace ForNet
                 SendRoomRulesAndRoles(head);
                 return;
             }
-            if (RelayOn && rh != null && who == "c") { old = rh.DemoteSecond(); head = rh.PromoteSecond(); }     // §141.8 第二位输了
+            if (RelayOn && rh != null && who == "c") { old = rh.DemoteSecond(); head = rh.PromoteSecond(); }     // 第二位输了
             else { old = lk.DemotePeer(); head = lk.PromoteHead(); }
             RelayDzReset();
             roleTo2 = old;
@@ -2480,11 +2480,11 @@ namespace ForNet
             if (diag) NetLog.W("排队：打完换人（" + why + "）");
         }
 
-        // §141.7 对手自己下去观战（面板"我下去观战"）：本机换成观战者、发观战握手，主机见到就让下一位上场
+        // 对手自己下去观战（面板"我下去观战"）：本机换成观战者、发观战握手，主机见到就让下一位上场
         public bool StepDown()
         {
             if (Role != "client" || !(T is ISpecSink)) return false;
-            SpecCfg.NoQueue = true;     // §141 自己下去 = 观战开关切成"只观战"，想再打自己切回"排队"（房主换人 / 补位不碰这个开关）
+            SpecCfg.NoQueue = true;     // 自己下去 = 观战开关切成"只观战"，想再打自己切回"排队"（房主换人 / 补位不碰这个开关）
             wantRole = "spec";
             return true;
         }
@@ -2503,7 +2503,7 @@ namespace ForNet
                 var lkMeshTick = T as Link;
                 if (lkMeshTick != null) lkMeshTick.MeshTick(now);
                 // 对手走了（连接断了，或 FillAfter 秒没包）→ 队首上场。从来没有过对手（RxSeen = 0）不补：空房间先来的观战者只是来看
-                // §220 例外：AI 开房等真人（AiWaiting）时主机在和 AI 打，排队的人就是来打的 → 马上叫队首上场，连进来 CheckWait 停 AI 转正
+                // 例外：AI 开房等真人（AiWaiting）时主机在和 AI 打，排队的人就是来打的 → 马上叫队首上场，连进来 CheckWait 停 AI 转正
                 //（以前 AI 房间里排队永远轮不到：打完换人的命令发给 AI 那条连接，那边没人排队）
                 if ((RxSeen > 0 || AiWaiting) && roleTo == null && (!lk.HasPeer || lk.SinceFromPeer > FillAfter) && lk.CanPromote)
                 {
@@ -2544,7 +2544,7 @@ namespace ForNet
             if (w != null)
             {
                 wantRole = null;
-                // §141 只观战（不排队）的人：主机 / 服务器叫上场一律不理（刚切成只观战、上场通知已经在路上的情况），主机过几秒会换下一个
+                // 只观战（不排队）的人：主机 / 服务器叫上场一律不理（刚切成只观战、上场通知已经在路上的情况），主机过几秒会换下一个
                 if (w == "client" && Role == "spec" && SpecCfg.NoQueue)
                 {
                     Log(L.T("只观战：不上场", "Watch only: not going up"));
@@ -2566,12 +2566,12 @@ namespace ForNet
         }
 
         public bool Connected { get { return (DateTime.UtcNow - lastRx).TotalSeconds < 2.0; } }
-        // §85.5 对方在：收到状态包，或 2 秒内握过手。等人的房间读不到游戏的包、一个状态包都不发，
+        // 对方在：收到状态包，或 2 秒内握过手。等人的房间读不到游戏的包、一个状态包都不发，
         // 要先收到主机的包才发自己状态的客户端（tests\fake_remote.py）只会一直握手——只认状态包就两边干等
         public bool PeerSeen { get { return Connected || Wire.SinceHello < 2.0; } }
 
-        // §85 AI 对战时等人的房间（文件在 net\wait\）有真人连进来 → 换到 net\ 当正式联机。连接本身不断：
-        // 房间号 / 端口 / Steam 连接都不变，对方不用重连。Run 线程下一轮（≤4ms）生效
+        // AI 对战时等人的房间（文件在 net\wait\）有真人连进来 → 换到 net\ 当正式联机。连接本身不断：
+        // 房间号 / 端口 / 桥接连接都不变，对方不用重连。Run 线程下一轮（≤4ms）生效
         public void Retarget(string dir) { retargetTo = dir; }
         public string PeerStr { get { return T.PeerStr; } }
 
@@ -2595,7 +2595,7 @@ namespace ForNet
             }
             thread = Safe.Thread("session-recv", Run);
             thread.Start();
-            sendThread = Safe.Thread("session-send", SendLoop);     // 观战者也开（§141.7 轮到上场就要发），观战时不发
+            sendThread = Safe.Thread("session-send", SendLoop);     // 观战者也开（轮到上场就要发），观战时不发
             sendThread.Start();
             return this;
         }
@@ -2604,7 +2604,7 @@ namespace ForNet
         {
             StopAllMpAi();
             var mh = T as IMpLink;
-            if (mh != null && mh.Mesh != null && mh.Mesh.MyPid > 0)     // §297 成员也告别（只告诉房主）
+            if (mh != null && mh.Mesh != null && mh.Mesh.MyPid > 0)     // 成员也告别（只告诉房主）
             {
                 mh.Mesh.BroadcastBye();
                 try { Thread.Sleep(30); } catch (Exception) { }
@@ -2632,17 +2632,17 @@ namespace ForNet
                     retargetTo = null;
                     fLocal = Path.Combine(rt, "state_local.txt");
                     fSession = Path.Combine(rt, "session.txt");
-                    T.Out.Retarget(Path.Combine(rt, "state_remote.txt"));     // 管道（§83）也跟着换：net\ 有、net\wait\ 没有
+                    T.Out.Retarget(Path.Combine(rt, "state_remote.txt"));     // 管道也跟着换：net\ 有、net\wait\ 没有
                     Rel.Retarget(rt);
                     lastSess = DateTime.MinValue;     // session.txt 马上写一份（role / peer / mode 都换了）
                 }
                 Rel.PollLua();
-                // §141 观战者一直每秒发一次握手（带 spec=1）当保活：主机 6 秒没收到就当它走了
+                // 观战者一直每秒发一次握手（带 spec=1）当保活：主机 6 秒没收到就当它走了
                 if (Role == "spec" && (now - lastHello).TotalSeconds > 1.0)
                 {
                     lastHello = now;
                     SendText(WireTag.P + "HELLO\npv=" + Proto.Version + "\nav=" + Proto.App + "\nnm=" + Name.Replace("\r", " ").Replace("\n", " ") + "\nspec=1\n"
-                             + (SpecCfg.NoQueue ? "noq=1\n" : "") + (SpecCfg.Up ? "up=1\n" : "") + "dzv=1\n" + Ident.Lines());     // §223.4 我会拼省流观战包
+                             + (SpecCfg.NoQueue ? "noq=1\n" : "") + (SpecCfg.Up ? "up=1\n" : "") + "dzv=1\n" + Ident.Lines());     // 我会拼省流观战包
                 }
                 // 客机没连上之前每 0.5 秒发一次握手：主机就算游戏还没读档，也能先知道往哪回
                 // 多人混战的客机：一直每秒握手一次（带 mp=1）当保活——游戏还没读完档、不发状态包时主机也不会把编号收回去
@@ -2652,11 +2652,11 @@ namespace ForNet
                 if (Role == "client" && (!Connected || mpJoin) && (now - lastHello).TotalSeconds > (Connected ? 1.0 : 0.5))
                 {
                     lastHello = now;
-                    // §85.5 带上昵称：AI 对战时等人的房间可能只靠握手就转正（还没收到状态包里的 nm=）
+                    // 带上昵称：AI 对战时等人的房间可能只靠握手就转正（还没收到状态包里的 nm=）
                     var lkHello = T as Link;
                     SendText(WireTag.P + "HELLO\npv=" + Proto.Version + "\nav=" + Proto.App + "\nnm=" + Name.Replace("\r", " ").Replace("\n", " ") + "\n"
-                             + (mpJoin ? "mp=1\n" + (lkHello != null && lkHello.LocalLanEndpoint.Length > 0 ? "lan=" + lkHello.LocalLanEndpoint + "\n" : "") + (MpMesh.HideIpPref ? "hideip=1\n" : "") + (MpCfg.JoinWatch ? "watch=1\n" : "") + MpMesh.V6HelloLine(T.LocalPort) : "")     // §323 v6=
-                             + Ident.Lines());     // §174 uid= / sh=
+                             + (mpJoin ? "mp=1\n" + (lkHello != null && lkHello.LocalLanEndpoint.Length > 0 ? "lan=" + lkHello.LocalLanEndpoint + "\n" : "") + (MpMesh.HideIpPref ? "hideip=1\n" : "") + (MpCfg.JoinWatch ? "watch=1\n" : "") + MpMesh.V6HelloLine(T.LocalPort) : "")     // v6=
+                             + Ident.Lines());     // uid= / sh=
                 }
                 int got = T.Pump();
                 if (got > 0)
@@ -2664,9 +2664,9 @@ namespace ForNet
                     lastRx = now;
                     RxSeen += got;
                 }
-                var kl = T as ServerLink;          // §174.9 刚按拉黑放掉了对手：马上算断开（收包线程里做，不和上面抢 lastRx）
+                var kl = T as ServerLink;          // 刚按拉黑放掉了对手：马上算断开（收包线程里做，不和上面抢 lastRx）
                 if (kl != null && kl.Kicked) { kl.Kicked = false; lastRx = DateTime.MinValue; }
-                if (kl != null && kl.ServerRoomMp) MpJoin = true;      // §240 服务器自己开的多人房：知道是多人就按多人会话写 session.txt
+                if (kl != null && kl.ServerRoomMp) MpJoin = true;      // 服务器自己开的多人房：知道是多人就按多人会话写 session.txt
                 QueueTick(now);
                 MpTick(now);
                 Rel.Tick(now);
@@ -2711,7 +2711,7 @@ namespace ForNet
                     lastBcast = now;
                     bool isMp = MpCfg.Max >= 2;
                     var lkB = T as Link;
-                    int mpCur = isMp ? MpMesh.Listed(lkB != null ? lkB.Mesh : null, (lkB != null ? lkB.MpPlayers().Count : 0) + 1) : 0;     // §326.4 对局外不算 AI
+                    int mpCur = isMp ? MpMesh.Listed(lkB != null ? lkB.Mesh : null, (lkB != null ? lkB.MpPlayers().Count : 0) + 1) : 0;     // 对局外不算 AI
                     bool full = isMp ? (mpCur >= MpCfg.Max) : Connected;
                     bool watchOk = !isMp && SpecCfg.Max > 0;
                     string mpSeg = isMp ? ("|" + mpCur + "/" + MpCfg.Max + ";" + ((MpTag ?? "m=elim;tm=0;st=idle") + MpMesh.ListedTag(lkB != null ? lkB.Mesh : null)).Replace("|", " ").Replace("\r", "").Replace("\n", "")) : "";
@@ -2756,7 +2756,7 @@ namespace ForNet
                                              + MeshSessionLines()
                                              + MpSessionLines() + "\n");
                 }
-                // HANDOVER §72.10：15ms → 4ms（配合 WinTimer 的 1ms 精度），一起到的包靠这个间隔各写一次 state_remote.txt
+                // 15ms → 4ms（配合 WinTimer 的 1ms 精度），一起到的包靠这个间隔各写一次 state_remote.txt
                 Thread.Sleep(PollMs);
                 Loops++;
             }
@@ -2784,7 +2784,7 @@ namespace ForNet
             return sb.ToString();
         }
 
-        // §130 每 0.5 秒看一次连接状态，有变化才写一行
+        // 每 0.5 秒看一次连接状态，有变化才写一行
         void DiagTick(DateTime now)
         {
             if (Wire.SinceHello < 1.0 && !helloLogged)
@@ -2823,21 +2823,21 @@ namespace ForNet
             }
         }
 
-        // HANDOVER §72.10：读 state_local.txt 发出去单独一个线程，每 4ms 一次。模组两次写有时只隔 ~17ms，
+        // 读 state_local.txt 发出去单独一个线程，每 4ms 一次。模组两次写有时只隔 ~17ms，
         // 原来 Sleep(15)（实际 15.6 / 31ms）会漏读；刚被替换的文件第一次打开要等杀毒扫描（实测常见 ~20ms），
         // 和收包、写 state_remote.txt 放在同一个循环里会互相拖慢
         void SendLoop()
         {
             string lastSeq = null, lastText = null, lastMpmSt = null;
             var pipeFor = fLocal;
-            var pipe = GamePipe.For(Path.GetDirectoryName(fLocal));     // §83
+            var pipe = GamePipe.For(Path.GetDirectoryName(fLocal));
             while (!stop)
             {
-                // §85 等人的房间转正 / 退回等人换了目录：管道跟着换（只有 net\ 有）
+                // 等人的房间转正 / 退回等人换了目录：管道跟着换（只有 net\ 有）
                 var fl = fLocal;
                 if (!ReferenceEquals(fl, pipeFor)) { pipeFor = fl; pipe = GamePipe.For(Path.GetDirectoryName(fl)); }
                 bool viaPipe = pipe != null && pipe.Connected;
-                if (Role == "spec") { Thread.Sleep(PollMs * 5); SendLoops++; continue; }     // §141 观战者不发自己的状态包
+                if (Role == "spec") { Thread.Sleep(PollMs * 5); SendLoops++; continue; }     // 观战者不发自己的状态包
                 var text = viaPipe ? pipe.LatestLocal : Kv.ReadText(fl);
                 if (text != null && text != lastText)   // 每 4ms 读一次，没变就不解析
                 {
@@ -2885,14 +2885,14 @@ namespace ForNet
                         // v0.22.0：协议版本 / 程序版本，对方据此提示"版本不一致"（旧版没有 pv=）
                         sb.Append("pv=").Append(Proto.Version).Append("\nav=").Append(Proto.App).Append('\n');
                         sb.Append("st=").Append(Kv.F(Link.UnixNow(), "0.0000")).Append('\n');
-                        // v0.18.7：带上自己的昵称（用户 2026-11-04 要求连上后面板显示对方昵称；直连方式以前只显示 IP）
+                        // v0.18.7：带上自己的昵称
                         sb.Append("nm=").Append(Name.Replace("\r", " ").Replace("\n", " ")).Append('\n');
                         var rk = RankPid;
                         if (rk != null) sb.Append("rk=").Append(rk).Append('\n');
-                        sb.Append(Ident.Lines());     // §174 拉黑用的标识
+                        sb.Append(Ident.Lines());     // 拉黑用的标识
                         var body = sb.ToString();
                         var slTap = T as ServerLink;
-                        if (slTap != null) slTap.StateTap(body);      // §240 服务器房：低频上报（观战 / 校验 / 计分 / 捡道具）
+                        if (slTap != null) slTap.StateTap(body);      // 服务器房：低频上报（观战 / 校验 / 计分 / 捡道具）
                         lock (hostRules)
                             foreach (var k in RuleKeys) { string rv; if (loc.TryGetValue(k, out rv)) hostRules[k] = rv; }
                         if (!RelayOn && (!HostSpecCfg.On || Role != "host"))
@@ -2915,11 +2915,11 @@ namespace ForNet
                             // M4：解说房两位选手之间直连（没打通时这里 no-op，照旧走房主中转）
                             var lkMeshState = T as Link;
                             if (lkMeshState != null) lkMeshState.MeshSendState(body);
-                            ForwardSpec(body, "h");     // §141 也给观战者一份
+                            ForwardSpec(body, "h");     // 也给观战者一份
                         }
                     }
                 }
-                // §83 管道：游戏一发来就醒（不用等 4ms 轮询）
+                // 管道：游戏一发来就醒（不用等 4ms 轮询）
                 if (viaPipe) pipe.LocalSignal.WaitOne(PollMs); else Thread.Sleep(PollMs);
                 SendLoops++;
             }
@@ -2930,7 +2930,7 @@ namespace ForNet
         List<IPAddress> BroadcastTargets()
         {
             if (bcastCache != null && (DateTime.UtcNow - bcastAt).TotalSeconds < 10) return bcastCache;
-            if (NetBind.Loopback) return bcastCache = NetBind.DiscoveryAddrs();   // §125 回环下收不到广播，单播给本机每个发现地址
+            if (NetBind.Loopback) return bcastCache = NetBind.DiscoveryAddrs();   // 回环下收不到广播，单播给本机每个发现地址
             var list = new List<IPAddress> { IPAddress.Broadcast };
             try
             {
@@ -2991,7 +2991,7 @@ namespace ForNet
         {
             var text = "lang=" + (En ? "en" : "zh") + "\n";
             Kv.WriteAtomic(FilePath(dir), text);         // 设置，下次启动读；只在切换时写
-            var p = GamePipe.For(dir);                   // §84 游戏经管道拿（不再每秒读一次文件）
+            var p = GamePipe.For(dir);                   // 游戏经管道拿（不再每秒读一次文件）
             if (p != null) p.SetDown("lang.txt", text);
         }
     }
@@ -3036,7 +3036,7 @@ namespace ForNet
             }
         }
 
-        public List<string[]> Current()   // {地址:端口, 名字, 地图, 已满, 能观战, 和 AI 对打, 主机标记（§174）, 多人字段}
+        public List<string[]> Current()   // {地址:端口, 名字, 地图, 已满, 能观战, 和 AI 对打, 主机标记, 多人字段}
         {
             var list = new List<string[]>();
             lock (rooms)
@@ -3056,18 +3056,18 @@ namespace ForNet
         readonly bool doBackup, bg;
         readonly Cfg cfg;
         Session session;
-        Session aiSession;    // §75 本地 AI：AI 那一头的 Session（net\ai\ ，127.0.0.1 连 session）
+        Session aiSession;    // 本地 AI：AI 那一头的 Session（net\ai\ ，127.0.0.1 连 session）
         ILocalAi ai;
-        // §85 AI 对战时同时开着的真房间（文件在 net\wait\，真人连进来后转正成 session）；waitMode = 它的连接方式
+        // AI 对战时同时开着的真房间（文件在 net\wait\，真人连进来后转正成 session）；waitMode = 它的连接方式
         Session waitSes;
         string waitMode = "";
         readonly CheckBox aiRoomBox = new CheckBox();
         readonly ComboBox aiRoomModeBox = new ComboBox();
         readonly Discovery disc = new Discovery();
         readonly LobbyList lobbyList = new LobbyList();
-        readonly CfgFetch cfgFetch = new CfgFetch();     // §158 数值表从大厅服务器拉（0.34 起只在面板点了"获取"才拉）
-        DateTime cfgAutoAt = DateTime.MinValue;          // §254 武林盟主方式下自动拉数值表（同意过 ranked；每 5 分钟 CFGQ 一次，同一张服务器只回"最新"）
-        IRankedClient rank;     // §110 武林盟主（排位）：密钥、上报、排行榜（Ranked.cs）；F4c-1 基底只认接口，没编排位时是 NoRanked（RankedApi.cs）
+        readonly CfgFetch cfgFetch = new CfgFetch();     // 数值表从大厅服务器拉（0.34 起只在面板点了"获取"才拉）
+        DateTime cfgAutoAt = DateTime.MinValue;          // 排位方式下自动拉数值表（同意过 ranked；每 5 分钟 CFGQ 一次，同一张服务器只回"最新"）
+        IRankedClient rank;     // 排位（排位）：密钥、上报、排行榜（Ranked.cs）；F4c-1 基底只认接口，没编排位时是 NoRanked（RankedApi.cs）
         IRankedClient Rank
         {
             get
@@ -3077,25 +3077,25 @@ namespace ForNet
             }
         }
 
-        // 面板 / 窗口里列出的连接方式：大厅服务器没开排位时不列"武林盟主"（用户 2026-11-06"没开就隐藏标签"）；
+        // 面板 / 窗口里列出的连接方式：大厅服务器没开排位时不列"排位"；
         // 还在问的时候（-1）只有正选着它才列，免得一开窗口标签闪一下
         string[] ShownModes
         {
             get
             {
                 int sup = Rank.Support;
-                // §135 武林盟主走 Steam：没有 Steam（发布版 / 游戏里的桥不在）就不列。已经选着它的照样列（游戏刚开时桥可能还没好，
-                // 别因此把玩家的选择改掉存盘），建房 / 加入时再提示 Steam 没连上
+                // 排位走桥接平台：没有桥接平台（发布版 / 游戏里的桥不在）就不列。已经选着它的照样列（游戏刚开时桥可能还没好，
+                // 别因此把玩家的选择改掉存盘），建房 / 加入时再提示桥接平台没连上
                 // 安全模式（本地）：只剩局域网 / 本地 AI（下线标志 X3 删了）
                 bool ai = LocalAiSupport.Has;     // 11-13 拆干净：本地 AI 由游戏适配编进来；没有就不列这种方式（面板跟着 modes= 藏标签）
                 if (cfg.Safe) return Array.FindAll(Modes.All, x => x == "lan" || (x == "ai" && ai));
-                var all = Array.FindAll(Modes.All, x => x != "bridge" && (x != "ai" || ai));     // 0.34 评审：面板没有 steam 标签了（好友在"最近"页），lobby.txt modes= 也不列，免得 End 键切进去
-                // 0.34：排位默认直连（§135 作废），不再要求 Steam
+                var all = Array.FindAll(Modes.All, x => x != "bridge" && (x != "ai" || ai));     // 0.34 评审：面板没有桥接平台标签了（好友在"最近"页），lobby.txt modes= 也不列，免得 End 键切进去
+                // 0.34：排位默认直连（作废），不再要求桥接平台
                 if (sup == 1 || (sup == -1 && Mode == "ranked")) return all;
                 return Array.FindAll(all, x => x != "ranked");
             }
         }
-        int shownSupport = -2;     // 上次按哪个 Support / Steam 有没有填的下拉框（变了重填）
+        int shownSupport = -2;     // 上次按哪个 Support / 桥接平台有没有填的下拉框（变了重填）
         int ShownKey { get { return Rank.Support * 2 + (cfg.Safe ? 16 : 0); } }
         readonly TextBox nameBox = new TextBox(), ipBox = new TextBox(), portBox = new TextBox(), srvBox = new TextBox(), secretBox = new TextBox();
         readonly ListBox roomList = new ListBox();
@@ -3108,11 +3108,11 @@ namespace ForNet
         Button hostBtn, joinBtn, stopBtn;
         readonly HashSet<string> myIps = new HashSet<string>();
         readonly List<string[]> cands = new List<string[]>();
-        // §141.14 房间列表里没满的房间：target → 主机认不认观战。"只观战"开着时点这些房间 = 观战，不认的不加入
+        // 房间列表里没满的房间：target → 主机认不认观战。"只观战"开着时点这些房间 = 观战，不认的不加入
         readonly Dictionary<string, bool> roomWatch = new Dictionary<string, bool>();     // 可加入目标 {类型, 显示名, target}
         readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer(), cmdTimer = new System.Windows.Forms.Timer();
         string lastLog = "", lastErr = "", lastCmd = null, lastPipeCmd = null, ack = "";
-        volatile bool cmdFileDirty = true;     // §84 cmd.txt 被改过（FileSystemWatcher）；没有管道时照旧每次读
+        volatile bool cmdFileDirty = true;     // cmd.txt 被改过（FileSystemWatcher）；没有管道时照旧每次读
         DateTime lastErrAt = DateTime.MinValue, noGameSince = DateTime.MinValue;
         bool loadingMode;
 
@@ -3121,7 +3121,7 @@ namespace ForNet
             this.dir = dir;
             this.doBackup = doBackup;
             this.bg = bg;
-            cfg = new Cfg(dir);      // 0.34 富状态 / 好友列表开关在 Cfg 构造里交给 Steam 桥
+            cfg = new Cfg(dir);      // 0.34 富状态 / 好友列表开关在 Cfg 构造里交给桥接 DLL
             L.Save(dir);      // 第一次按系统语言选好后也写下来，游戏端读到的和窗口一致
             Font = new Font("Microsoft YaHei UI", 9f);
             ClientSize = new Size(600, 640);
@@ -3145,7 +3145,7 @@ namespace ForNet
             langBox.SelectedIndexChanged += delegate { L.En = langBox.SelectedIndex == 1; L.Save(dir); ApplyLang(); };
             Add(langBox);
             y += 34;
-            // 连接方式（net-ui）：Steam 好友 / 局域网 / 广域网 / 虚拟局域网；游戏内联机面板改的也是这个
+            // 连接方式（net-ui）：平台好友 / 局域网 / 广域网 / 虚拟局域网；游戏内联机面板改的也是这个
             lblMode.SetBounds(14, y + 3, 130, 20); Add(lblMode);
             modeBox.DropDownStyle = ComboBoxStyle.DropDownList;
             modeBox.SetBounds(150, y, 250, 24);
@@ -3183,7 +3183,7 @@ namespace ForNet
             hostBtn = new Button { Left = 14, Top = y, Width = 180, Height = 30 };
             hostBtn.Click += delegate { StartSession("host", null); };
             Add(hostBtn);
-            // §85 本地 AI：同时开房等真人（开关）+ 开房方式；AI 对战中也能开关、换方式
+            // 本地 AI：同时开房等真人（开关）+ 开房方式；AI 对战中也能开关、换方式
             aiRoomBox.SetBounds(206, y + 4, 150, 24); aiRoomBox.Checked = cfg.AiRoom; Add(aiRoomBox);
             aiRoomBox.CheckedChanged += delegate { if (!loadingMode) SetAiRoom(aiRoomBox.Checked); };
             aiRoomModeBox.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -3205,15 +3205,15 @@ namespace ForNet
             roomList.DoubleClick += delegate
             {
                 int i = roomList.SelectedIndex;
-                if (i >= 0 && i < cands.Count && cands[i][0] == "nohost") Warn(L.T("对方还没开房", "They are not hosting yet"));   // §123
-                else if (i >= 0 && i < cands.Count && (cands[i][0] == "watch" || cands[i][0] == "watchf")) Spectate(cands[i][2]);   // §141
+                if (i >= 0 && i < cands.Count && cands[i][0] == "nohost") Warn(L.T("对方还没开房", "They are not hosting yet"));
+                else if (i >= 0 && i < cands.Count && (cands[i][0] == "watch" || cands[i][0] == "watchf")) Spectate(cands[i][2]);
                 else if (i >= 0 && i < cands.Count) { ipBox.Text = cands[i][2]; Join(cands[i][2]); }
             };
             Controls.Add(roomList);
             y += 120;
             status.SetBounds(14, y, 370, 120);
             Add(status);
-            // 右侧大字：当前身份（用户 2026-11-04："当前是主机还是客机要明确地用大字显示"）
+            // 右侧大字：当前身份
             roleBig.SetBounds(390, y, 196, 54);
             roleBig.Font = new Font("Microsoft YaHei UI", 26f, FontStyle.Bold);
             roleBig.TextAlign = ContentAlignment.MiddleCenter;
@@ -3257,10 +3257,10 @@ namespace ForNet
             cmdTimer.Start();
             FormClosing += (s, e) =>
             {
-                // §99 后台模式（游戏带起的）被游戏内面板"打开电脑上的联机窗口"显示出来后，点 × 只藏起窗口。
+                // 后台模式（游戏带起的）被游戏内面板"打开电脑上的联机窗口"显示出来后，点 × 只藏起窗口。
                 // 2026-11-05 19:56 内测：点 × 整个联机程序退出，游戏那边管道断开、4 分多钟没有联机程序，直到手动重启
                 if (bg && !quitting && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); return; }
-                quitting = true;          // 关闭过程中 Tick() 再进 AutoExit 时不要再 Quit
+                quitting = true;          // 关闭过程中 Tick 再进 AutoExit 时不要再 Quit
                 timer.Stop(); cmdTimer.Stop(); StopSession(); disc.Close(); lobbyList.Close(); cfgFetch.Close(); Bridge.Shutdown();
                 WriteLobby(false);
             };
@@ -3309,11 +3309,11 @@ namespace ForNet
 
         void WriteNone()
         {
-            GamePipe.Out(Path.Combine(dir, "session.txt"), "role=none\nconnected=0\npeer=\nt=" + Kv.F(Link.UnixNow(), "0.0") + "\n");     // §84
+            GamePipe.Out(Path.Combine(dir, "session.txt"), "role=none\nconnected=0\npeer=\nt=" + Kv.F(Link.UnixNow(), "0.0") + "\n");
         }
 
         // 出错：窗口开着就弹框，同时记下来给游戏内面板显示
-        // §255.4 问题 A：面板命令通道（cmd.txt）的同意兜底。Lua 的 CONSENT.gate 是第一道，这里是程序层第二道：
+        // 问题 A：面板命令通道（cmd.txt）的同意兜底。Lua 的 CONSENT.gate 是第一道，这里是程序层第二道：
         // 没同意过就不开房 / 不加入 / 不观战（测试工具、改过的脚本、旧配置都绕不过）。键和 Lua CONSENT.MODE_KEY 一样；
         // 本地 AI 不发数据不问（AI 等人房间在 StartWait 另有一道）；--consent-all 时全放行。
         bool ConsentGate(string cmd, Dictionary<string, string> d, bool mp = false)     // mp：多人房另要 consent_mp（11-14，房里所有人都能看到你的 IP）
@@ -3326,7 +3326,7 @@ namespace ForNet
             string target = d.TryGetValue("target", out v) ? v : "";
             if ((cmd == "join" || cmd == "spectate") && target.StartsWith("bridge:")) keys[1] = "bridge_match";
             if (cmd == "join" && d.TryGetValue("bridge", out v) && v == "1") keys.Add("bridge_match");
-            if (cmd == "host" && d.TryGetValue("bridge", out v) && v == "1") keys[1] = "bridge_match";     // §281 开房（好友可见）走桥接，不用当前方式那一项
+            if (cmd == "host" && d.TryGetValue("bridge", out v) && v == "1") keys[1] = "bridge_match";     // 开房（好友可见）走桥接，不用当前方式那一项
             if (cmd == "host" && cfg.BridgeRoom) keys.Add("bridge_match");
             bool isMp = mp || (cmd == "join" && d.TryGetValue("mp", out v) && v == "1");
             if (isMp) keys.Add("mp");
@@ -3341,7 +3341,7 @@ namespace ForNet
             return true;
         }
 
-        // §296 从房间列表 / 好友页点进多人房走的是 join 命令，ConsentGate 那时还不知道是多人房；认出是多人房后再补查 consent_mp
+        // 从房间列表 / 好友页点进多人房走的是 join 命令，ConsentGate 那时还不知道是多人房；认出是多人房后再补查 consent_mp
         bool MpJoinConsent()
         {
             if (Consent.All || Consent.Has("mp")) return true;
@@ -3366,8 +3366,8 @@ namespace ForNet
         void SetMode(string m)
         {
             m = Modes.Valid(m);
-            if (m == "ranked" && Rank.Support == 0) { Warn(L.T("这台大厅服务器没开武林盟主排位", "This lobby server has no ranked mode")); ApplyLang(); return; }
-            // 0.34：排位默认直连，不再要求 Steam（§135 作废；"对局走 " + Bridge.Svc是房间设置）     // §135
+            if (m == "ranked" && Rank.Support == 0) { Warn(L.T("这台大厅服务器没开" + GameInfo.RankedLongZh, "This lobby server has no ranked mode")); ApplyLang(); return; }
+            // 0.34：排位默认直连，不再要求桥接平台（作废；"对局走 " + Bridge.Svc是房间设置）     //
             if (session != null && m != Mode) { Warn(L.T("联机中不能换连接方式，先断开", "Disconnect before changing the connection")); ApplyLang(); return; }
             cfg.Mode = m;
             cfg.Save();
@@ -3377,9 +3377,9 @@ namespace ForNet
             Tick();
         }
 
-        // §116 remember = false：不记进"最近连接"（testsake_join.py 让游戏连本机假主机时带 remember=0，
+        // remember = false：不记进"最近连接"（testsake_join.py 让游戏连本机假主机时带 remember=0，
         // 不然 127.0.0.1:27115 / 27117 这种测试地址会一直留在用户面板的"加入 最近"里）
-        // 0.34 "最近"页里点 Steam 好友（没有 Steam 好友标签页了）：临时切到 steam 方式，会话结束后 Tick 切回；返回 false = 切不了
+        // 0.34 "最近"页里点平台好友（没有平台好友标签页了）：临时切到桥接平台方式，会话结束后 Tick 切回；返回 false = 切不了
         bool AutoBridge(string text)
         {
             if (!text.StartsWith("bridge:") || Mode == "bridge" || Mode == "ai") return true;
@@ -3396,9 +3396,9 @@ namespace ForNet
             text = (text ?? "").Trim();
             if (Mode == "ai") { StartSession("host", null); return; }     // 本地 AI 没有"加入"，一律当开始
             if (!AutoBridge(text)) return;
-            // §141.14 "只观战"开着时点房间列表里没满的房间：以观战者身份进去；主机不认观战（或排位）就不加入、提示
+            // "只观战"开着时点房间列表里没满的房间：以观战者身份进去；主机不认观战（或排位）就不加入、提示
             bool canWatch;
-            if (SpecCfg.NoQueue && IsMpTarget(text)) nextMpWatch = true;     // §324 新版房间：照常加入，进去后当"只看不上场"
+            if (SpecCfg.NoQueue && IsMpTarget(text)) nextMpWatch = true;     // 新版房间：照常加入，进去后当"只看不上场"
             else if (SpecCfg.NoQueue && roomWatch.TryGetValue(text, out canWatch))
             {
                 if (canWatch && Mode != "ranked") { Spectate(text); return; }
@@ -3416,16 +3416,16 @@ namespace ForNet
             // 服务器大厅里填的是 IP / 域名（带 . 或 :）= 输入 IP 直连（原来的广域网）
             if (Modes.IsServer(Mode) && (text.IndexOf('.') >= 0 || text.IndexOf(':') >= 0) && !text.StartsWith("room:"))
             {
-                // §110 排位要经服务器（服务器靠会话认两边是谁），不能 IP 直连
-                if (Mode == "ranked") { Warn(L.T("武林盟主只能从房间列表 / 房间号加入，不能 IP 直连", "Ranked rooms are joined from the list or by room code, not by IP")); return; }
-                var dep = Addr.ParseDirect(text, cfg.Port);     // §280 IPv4 / IPv6 都认
+                // 排位要经服务器（服务器靠会话认两边是谁），不能 IP 直连
+                if (Mode == "ranked") { Warn(L.T(GameInfo.RankedZh + "只能从房间列表 / 房间号加入，不能 IP 直连", "Ranked rooms are joined from the list or by room code, not by IP")); return; }
+                var dep = Addr.ParseDirect(text, cfg.Port);     // IPv4 / IPv6 都认
                 if (dep == null) { Warn(L.T("认不出这个地址：", "Can't resolve this address: ") + text); return; }
                 if (StartSession("client", dep, 0) && remember) cfg.Remember(Mode, Addr.Fmt(dep));
                 return;
             }
             if (Modes.IsServer(Mode))
             {
-                // 房间号（6 位）或列表里的 room:<房间号>[@<所在服务器 IP:端口>]（别的服务器互通过来的房间，要去那台加入，§50）；
+                // 房间号（6 位）或列表里的 room:<房间号>[@<所在服务器 IP:端口>]（别的服务器互通过来的房间，要去那台加入）；
                 // 房间是临时的，不记进最近列表
                 var room = text.StartsWith("room:") ? text.Substring(5) : text;
                 int at = room.IndexOf('@');
@@ -3443,16 +3443,16 @@ namespace ForNet
                 if (id == 0) { Warn(L.T("这不是有效的桥接 ID：", "Not a valid bridge ID: ") + text); return; }
                 if (roomMp.ContainsKey(text) || roomMp.ContainsKey("bridge:" + id) || roomMp.ContainsKey(id.ToString()))
                 { if (!MpJoinConsent()) return; nextMpJoin = true; }
-                StartSession("client", null, id);     // 0.34 评审：不记 recent_steam=（明文 SteamID64 落盘）
+                StartSession("client", null, id);     // 0.34 评审：不记 recent_steam=（明文平台账号 ID落盘）
                 return;
             }
             if (roomMp.ContainsKey(text)) { if (!MpJoinConsent()) return; nextMpJoin = true; }
-            var ep = Addr.ParseDirect(text, Session.GamePort);     // §280
+            var ep = Addr.ParseDirect(text, Session.GamePort);
             if (ep == null) { Warn(L.T("认不出这个地址：", "Can't resolve this address: ") + text); return; }
             if (StartSession("client", ep, 0) && remember) cfg.Remember(Mode, ep.Port == Session.GamePort ? ep.Address.ToString() : ep.ToString());
         }
 
-        // §141.7 对手自己下去观战：局域网 / IP / Steam 在会话里换角色；服务器大厅的客机要换成观战连接（WatchLink），重开会话
+        // 对手自己下去观战：局域网 / IP / 桥接平台在会话里换角色；服务器大厅的客机要换成观战连接（WatchLink），重开会话
         void ToSpec()
         {
             var s = session;
@@ -3462,23 +3462,23 @@ namespace ForNet
             if (sl != null && sl.RoomId.Length > 0) { var room = sl.RoomId; nextDown = true; StartSession("spec", null, 0, room); }
         }
 
-        // §141 观战：局域网 / 服务器大厅里输入 IP，连主机当观战者（主机要是局域网开的房，服务器大厅的主机还不支持）
+        // 观战：局域网 / 服务器大厅里输入 IP，连主机当观战者（主机要是局域网开的房，服务器大厅的主机还不支持）
         void Spectate(string text)
         {
             text = (text ?? "").Trim();
             if (Mode == "ranked" || Mode == "ai") { Warn(L.T("这种连接方式不能观战", "Spectating is not available in this mode")); return; }
-            // §324 新版房间（多人 / 对决，全互连）：观战 = 加入房间 + 只看不上场；状态包由选手 / 转发机直接发来，不经大厅服务器转发（旧的 WatchLink 只留给旧版 1v1）
+            // 新版房间（多人 / 对决，全互连）：观战 = 加入房间 + 只看不上场；状态包由选手 / 转发机直接发来，不经大厅服务器转发（旧的 WatchLink 只留给旧版 1v1）
             if (IsMpTarget(text)) { nextMpWatch = true; Join(text.StartsWith("watch:") ? "room:" + text.Substring(6) : text); return; }
             if (!AutoBridge(text)) return;
             if (Modes.IsBridge(Mode))
             {
-                // §141 Steam 好友（steam:<SteamID64>）：连主机当观战者
+                // 平台好友（桥接平台:<平台账号 ID>）：连主机当观战者
                 ulong owner = Addr.BridgeId(text);
                 if (owner == 0) { Warn(L.T("找不到主机：", "Can't find the host: ") + text); return; }
                 StartSession("spec", null, owner);
                 return;
             }
-            // §141 服务器大厅房间列表里的 watch:<房间号>[@服务器]，或直接填房间号
+            // 服务器大厅房间列表里的 watch:<房间号>[@服务器]，或直接填房间号
             if (Modes.IsServer(Mode) && (text.StartsWith("watch:") || text.StartsWith("room:") || (text.IndexOf('.') < 0 && text.IndexOf(':') < 0)))
             {
                 var room = text.StartsWith("watch:") ? text.Substring(6) : text.StartsWith("room:") ? text.Substring(5) : text;
@@ -3486,7 +3486,7 @@ namespace ForNet
                 StartSession("spec", null, 0, room);
                 return;
             }
-            var ep = Addr.ParseDirect(text, Modes.IsServer(Mode) ? cfg.Port : Session.GamePort);     // §280
+            var ep = Addr.ParseDirect(text, Modes.IsServer(Mode) ? cfg.Port : Session.GamePort);
             if (ep == null) { Warn(L.T("认不出这个地址：", "Can't resolve this address: ") + text); return; }
             StartSession("spec", ep, 0);
         }
@@ -3494,14 +3494,14 @@ namespace ForNet
         bool StartSession(string role, IPEndPoint peer) { return StartSession(role, peer, 0, null); }
         bool StartSession(string role, IPEndPoint peer, ulong bridgeHost) { return StartSession(role, peer, bridgeHost, null); }
 
-        string nextToken;       // §141.7 下一次服务器大厅客机会话 JOIN 带的上场口令
-        bool nextDown;          // §141.7 下一次服务器大厅观战会话是"刚下场的"
+        string nextToken;       // 下一次服务器大厅客机会话 JOIN 带的上场口令
+        bool nextDown;          // 下一次服务器大厅观战会话是"刚下场的"
 
         int nextMpMax;          // 多人混战：下一次开的会话是多人房间（人数）/ 按多人加入；开完就清，之后普通开房 / 加入还是 1v1
         bool nextMpJoin;
-        bool nextMpWatch;     // §324 下一次加入是"观战"（Spectate / 只观战点新版房间）
+        bool nextMpWatch;     // 下一次加入是"观战"（Spectate / 只观战点新版房间）
 
-        // §324 房间列表 / 好友页里这一项是新版房间（多人 / 对决）：列表、房间号、watch: / room: 几种写法都认
+        // 房间列表 / 好友页里这一项是新版房间（多人 / 对决）：列表、房间号、watch: / room: 几种写法都认
         bool IsMpTarget(string text)
         {
             if (string.IsNullOrEmpty(text)) return false;
@@ -3515,7 +3515,7 @@ namespace ForNet
 
         bool StartSession(string role, IPEndPoint peer, ulong bridgeHost, string room)
         {
-            // §281 临时切到桥接方式（AutoBridge：好友页开房 / 加入好友）后马上开会话：StopSession 里的 Tick 看到"没会话 + 临时切过"会立刻切回去，
+            // 临时切到桥接方式（AutoBridge：好友页开房 / 加入好友）后马上开会话：StopSession 里的 Tick 看到"没会话 + 临时切过"会立刻切回去，
             // 新会话就按原来的方式开了（以前从"最近"页加入好友也是这样）。这次先收起切回标记，开完再放回
             var keepAuto = autoBridgeFrom;
             autoBridgeFrom = null;
@@ -3535,29 +3535,29 @@ namespace ForNet
             {
                 ITransport t = null;
                 ServerLink sl = null;
-                IRoomLink rl = null;      // §135 经大厅服务器开房 / 加入的（服务器大厅 sl，或武林盟主 BridgeRoomLink）
-                // 0.34（TASK_0.34 最终方案 3）：服务器大厅 / 武林盟主的房间默认 UDP 直连（不中转）；房主开了"对局走 " + Bridge.Svc的房经 Steam 连（BridgeRoomLink），
-                // 客机按房间列表第 11 列判断对方的房是不是 Steam 房（roomBridge）。观战不走 Steam 房
-                // §279 三档：主机按自己的设置（一直桥接 = BridgeRoomLink；桥接扩展包没装 / 没启用时退回直连，不然整个开不了房）；
+                IRoomLink rl = null;      // 经大厅服务器开房 / 加入的（服务器大厅 sl，或排位 BridgeRoomLink）
+                // 0.34（最终方案 3）：服务器大厅 / 排位的房间默认 UDP 直连（不中转）；房主开了"对局走 " + Bridge.Svc的房经桥接平台连（BridgeRoomLink），
+                // 客机按房间列表第 11 列判断对方的房是不是桥接平台房（roomBridge）。观战不走桥接平台房
+                // 三档：主机按自己的设置（一直桥接 = BridgeRoomLink；桥接扩展包没装 / 没启用时退回直连，不然整个开不了房）；
                 // 客机一律按主机的（房间列表第 11 列：1 = 一直桥接、2 = 直连失败时走桥接），自己的设置不管
                 bool bridgeUsable = Modes.ShowBridge && Bridge.Available;
-                // §344 一直桥接的房走 BridgeRoomLink，它只有 1v1（没有 IMpLink）：多人房间以前在这里悄悄变成旧版 1v1 房（不报 mp=1、列表标 [旧版]、面板没有玩法设置）。
-                // 多人房间按"直连失败时走桥接"开（§329 那条退路），并明说
+                // 一直桥接的房走 BridgeRoomLink，它只有 1v1（没有 IMpLink）：多人房间以前在这里悄悄变成旧版 1v1 房（不报 mp=1、列表标 [旧版]、面板没有玩法设置）。
+                // 多人房间按"直连失败时走桥接"开（那条退路），并明说
                 bool mpHostNoBridge = role == "host" && MpCfg.Max >= 2 && Modes.IsServer(Mode) && cfg.BridgeRoom;
                 bool bridgeRoom = Modes.IsServer(Mode) && role != "spec" && !Program.RankUdp
                               && (role == "host" ? cfg.BridgeRoom && bridgeUsable && !mpHostNoBridge : IsBridgeRoom(room));
                 if (role == "host" && Modes.IsServer(Mode) && cfg.BridgeRoom && !bridgeUsable)
-                    NetLog.W("§279 房间设置是\"一直桥接\"，但桥接扩展包没装 / 没启用：这间房只走直连");
+                    NetLog.W("房间设置是\"一直桥接\"，但桥接扩展包没装 / 没启用：这间房只走直连");
                 if (mpHostNoBridge)
                 {
-                    NetLog.W("§344 多人房间不支持\"一直桥接\"：这间房按\"直连失败时走桥接\"开");
+                    NetLog.W("多人房间不支持\"一直桥接\"：这间房按\"直连失败时走桥接\"开");
                     Warn(L.T("多人房间不支持\"一直桥接\"，这间房改成直连失败时走桥接",
                                          "Multiplayer rooms can't use \"always bridge\"; this room uses the bridge only if direct fails"));     // 只是提示，接着开房
                 }
                 // 安全模式：只许局域网 / 本地 AI
                 if (cfg.Safe && Mode != "lan" && Mode != "ai") { Warn(SafeMsg()); return false; }
-                // 0.34 评审：从"最近"页 / 手输房间号进 Steam 房时 Lua 不知道它是 Steam 房、没问过 steam_match——这里兜底：自己没开"对局走 " + Bridge.Svc就不进
-                if (bridgeRoom && role == "client" && (!bridgeUsable || !(Consent.All || Consent.Has("bridge_match"))))     // §279 看能不能、同意没，不看自己的设置
+                // 0.34 评审：从"最近"页 / 手输房间号进桥接平台房时 Lua 不知道它是桥接平台房、没问过 steam_match——这里兜底：自己没开"对局走 " + Bridge.Svc就不进
+                if (bridgeRoom && role == "client" && (!bridgeUsable || !(Consent.All || Consent.Has("bridge_match"))))     // 看能不能、同意没，不看自己的设置
                 {
                     Warn(!bridgeUsable ? L.T("这间房主机设成一直桥接：要装上桥接扩展包并在它的插件页启用（重启游戏生效）", "The host set this room to always use the bridge: install and enable the bridge extension (restart the game)")
                                        : L.T("这间房主机设成一直桥接：先同意桥接（面板会问）", "The host set this room to always use the bridge: agree to the bridge first (the panel asks)"));
@@ -3567,7 +3567,7 @@ namespace ForNet
                 {
                     // 大厅服务器只管登记 / 介绍 /（排位）记分，不打洞、不中转；对局数据全走 BridgeLink
                     int at = room != null ? room.IndexOf('@') : -1;
-                    if (at >= 0) room = room.Substring(0, at);       // 排位房间不推给别的服务器（§110），一般不会有 @
+                    if (at >= 0) room = room.Substring(0, at);       // 排位房间不推给别的服务器，一般不会有 @
                     var srv = LobbyServer.Resolve(cfg.Server);
                     if (srv == null)
                     {
@@ -3590,7 +3590,7 @@ namespace ForNet
                 }
                 else if (role == "spec" && room != null && Modes.IsServer(Mode))
                 {
-                    // §141 服务器大厅的房间：观战者只和大厅服务器说话，主机的两路包由服务器转来
+                    // 服务器大厅的房间：观战者只和大厅服务器说话，主机的两路包由服务器转来
                     int at = room.IndexOf('@');
                     var srv = LobbyServer.Resolve(at >= 0 ? room.Substring(at + 1) : cfg.Server);
                     if (at >= 0) room = room.Substring(0, at);
@@ -3620,15 +3620,15 @@ namespace ForNet
                     if (MpCfg.Max >= 2) { sl.MpTag = currentMpTag; }
                     sl.ServerName = at >= 0 ? "" : cfg.Server;     // 互通过来的房间去的是别的服务器，只显示 IP
                     if (role == "client") { sl.JoinToken = nextToken; nextToken = null; }
-                    if (Mode == "ranked") sl.RankPid = Rank.Pid;     // 0.34 排位默认直连就走这里（§135 作废）
-                    // §279 直连失败时走桥接：主机按自己的设置（1 档）；客机按房间（列表第 11 列 = 2）。都要桥在、同意过 bridge_match 才把桥接 ID 交给服务器
-                    if (Modes.IsServer(Mode) && !(Mode == "ranked" && Program.RankUdp) && role != "spec" && peer == null)     // 服务器大厅和武林盟主都算（同"一直桥接"的判断）
+                    if (Mode == "ranked") sl.RankPid = Rank.Pid;     // 0.34 排位默认直连就走这里（作废）
+                    // 直连失败时走桥接：主机按自己的设置（1 档）；客机按房间（列表第 11 列 = 2）。都要桥在、同意过 bridge_match 才把桥接 ID 交给服务器
+                    if (Modes.IsServer(Mode) && !(Mode == "ranked" && Program.RankUdp) && role != "spec" && peer == null)     // 服务器大厅和排位都算（同"一直桥接"的判断）
                     {
                         bool agreed = Consent.All || Consent.Has("bridge_match");
                         if (role == "client") { sl.FallbackRoom = IsFallbackRoom(room); sl.FallbackHostPid = FallbackHostPidOf(room); }
                         bool want = role == "host" ? (cfg.BridgeMode == 1 || mpHostNoBridge) : sl.FallbackRoom;
                         if (want && bridgeUsable && agreed && Bridge.Init() && Bridge.MyId != 0) sl.FallbackMyId = Bridge.MyId;
-                        if (want) NetLog.W("§279 " + (role == "host" ? "主机" : "客机") + "：直连失败时走桥接 " + (sl.FallbackMyId != 0 ? "准备好了" : "用不了（" + (!bridgeUsable ? "没有桥接扩展包" : !agreed ? "没同意桥接" : "桥没就绪") + "），只走直连"));
+                        if (want) NetLog.W("" + (role == "host" ? "主机" : "客机") + "：直连失败时走桥接 " + (sl.FallbackMyId != 0 ? "准备好了" : "用不了（" + (!bridgeUsable ? "没有桥接扩展包" : !agreed ? "没同意桥接" : "桥没就绪") + "），只走直连"));
                     }
                     rl = sl;
                 }
@@ -3652,7 +3652,7 @@ namespace ForNet
                 session = ses;
                 session.Log = m => { lastLog = DateTime.Now.ToString("HH:mm:ss ") + m; };
                 session.Start();
-                if (Mode == "server" && role == "host" && cfg.Upnp) Upnp.MapAsync(port);     // §135 武林盟主走 Steam，用不着开端口
+                if (Mode == "server" && role == "host" && cfg.Upnp) Upnp.MapAsync(port);     // 排位走桥接平台，用不着开端口
             }
             catch (SocketException ex)
             {
@@ -3674,20 +3674,20 @@ namespace ForNet
             return true;
         }
 
-        // §75 本地 AI 对战：游戏这边当主机（随机端口，不广播、不签名），AI 当客机从 127.0.0.1 连进来，包走真的 Session / 可靠通道；
-        // LocalAi 在 net\ai\  里读你的包、写它的包。在 StartSession 的 try 里调（开不了端口照常报错）
-        // backFrom：§85 真人离开后重开 AI 时，离开的人的昵称（AI 的包带上，模组提示"XXX 已离开房间，AI 对战已重新开始"）
+        // 本地 AI 对战：游戏这边当主机（随机端口，不广播、不签名），AI 当客机从 127.0.0.1 连进来，包走真的 Session / 可靠通道；
+        // LocalAi 在 net\ai\ 里读你的包、写它的包。在 StartSession 的 try 里调（开不了端口照常报错）
+        // backFrom： 真人离开后重开 AI 时，离开的人的昵称（AI 的包带上，模组提示"XXX 已离开房间，AI 对战已重新开始"）
         bool StartAi(string backFrom = null)
         {
             if (!LocalAiSupport.Has) throw new Exception(L.T("这个版本没有本地 AI（由游戏适配提供）", "This build has no local AI (it comes with the game adapter)"));
             var aiDir = Path.Combine(dir, "ai");
             Directory.CreateDirectory(aiDir);
-            GamePipe.StartVirtual(aiDir);       // §84 AI 和它的 Session 在同一个进程里：内存交接，不写 net\ai\ 的文件（要在建 Session 之前）
+            GamePipe.StartVirtual(aiDir);       // AI 和它的 Session 在同一个进程里：内存交接，不写 net\ai\ 的文件（要在建 Session 之前）
             foreach (var f in new[] { "state_local.txt", "state_remote.txt", "session.txt", "rel_in.txt", "rel_out.txt" })
                 try { File.Delete(Path.Combine(aiDir, f)); } catch (Exception) { }
             var host = new Session("host", "ai", null, null, 0, cfg.Name, dir, doBackup, null);
             session = host;
-            // "对端锁定为 127.0.0.1:…" 对 AI 没意义，还会盖掉"XXX 已离开房间，AI 对战已重新开始"（§85）
+            // "对端锁定为 127.0.0.1:…" 对 AI 没意义，还会盖掉"XXX 已离开房间，AI 对战已重新开始"
             var locked = L.T("对端锁定为 ", "Peer locked: ");
             session.Log = m => { if (!m.StartsWith(locked)) lastLog = DateTime.Now.ToString("HH:mm:ss ") + m; };
             session.Start();
@@ -3698,7 +3698,7 @@ namespace ForNet
             }
             catch (Exception) { StopSession(); throw; }     // 主机那头已经开了，别留着
             ai = LocalAiSupport.Impl.Create(aiDir, cfg.AiLevel, cfg.AiLoad, backFrom);     // F5：AI 本身在游戏适配里
-            // §127 重开时 AI 开局那几行（读招式表、"AI：武器 / 影之武装 …" §114）同样会盖掉"XXX 已离开房间"：
+            // 重开时 AI 开局那几行（读招式表、"AI：武器 / 影之武装 …"）同样会盖掉"XXX 已离开房间"：
             // 在 AI 说别的话（喝药、被打倒…）之前，这几种不进 msg
             bool quiet = backFrom != null;
             var setup = LocalAiSupport.SetupLogPrefixes();
@@ -3712,14 +3712,14 @@ namespace ForNet
             lastLog = DateTime.Now.ToString("HH:mm:ss ") + (backFrom != null ? backFrom + L.T(" 已离开房间，AI 对战已重新开始", " left the room; AI battle restarted")
                       : L.T("AI 对手已就位：两边都按 F1 准备后开打（AI 一直是准备好的）", "AI opponent ready: press F1 to fight (the AI is always ready)"));
             if (cfg.AiRoom && waitSes == null) StartWait();     // 真人离开时房间已经退回等人（CheckBack），不重开
-            else if (waitSes != null) session.SpecRelay = waitSes;     // §220 退回等人的房间：AI 对打的包照样转给那边的观战者（以前只在 StartWait 里接）
+            else if (waitSes != null) session.SpecRelay = waitSes;     // 退回等人的房间：AI 对打的包照样转给那边的观战者（以前只在 StartWait 里接）
             Tick();
             return true;
         }
 
         bool AiRunning { get { return session != null && session.Mode == "ai"; } }
 
-        // §85 主机连接（等人的房间用）：和 StartSession 里当主机的那一支一样，只是文件放在 d
+        // 主机连接（等人的房间用）：和 StartSession 里当主机的那一支一样，只是文件放在 d
         Session NewHost(string mode, string d)
         {
             ITransport t = null;
@@ -3745,7 +3745,7 @@ namespace ForNet
             return ses;
         }
 
-        // §85 AI 对战时同时开一个真房间（cfg.AiRoomMode）。文件在 net\wait\：游戏照常和 AI 打，
+        // AI 对战时同时开一个真房间（cfg.AiRoomMode）。文件在 net\wait\：游戏照常和 AI 打，
         // 有真人连进来（收到它的状态包）→ CheckWait 停掉 AI、把这个房间转正。开不了只提示，AI 对战照常
         void StartWait()
         {
@@ -3769,7 +3769,7 @@ namespace ForNet
                 ses.Start();
                 waitSes = ses;
                 var ais = session;
-                if (ais != null) ais.SpecRelay = ses;     // §141 AI 对打的两路包给等人房间的观战者
+                if (ais != null) ais.SpecRelay = ses;     // AI 对打的两路包给等人房间的观战者
                 waitMode = m;
                 if (m == "server" && cfg.Upnp) Upnp.MapAsync(cfg.Port);
                 lastLog = DateTime.Now.ToString("HH:mm:ss ") + L.T("同时开着房间等真人（", "Also hosting a room (") + Modes.Name(m)
@@ -3794,18 +3794,18 @@ namespace ForNet
             if (waitMode == "server") Upnp.Unmap();
         }
 
-        // §85 等人的房间有真人来了（§85.5 起：状态包或握手都算，PeerSeen）：停掉 AI（两头的连接 + LocalAi），房间转正成正式联机，
-        // 连接方式换成房间的方式（面板 / 窗口都按真人联机显示）。游戏那边看到对手不再是 AI（ai=1 没了）就结束 AI 那局（main.lua §85）
+        // 等人的房间有真人来了（起：状态包或握手都算，PeerSeen）：停掉 AI（两头的连接 + LocalAi），房间转正成正式联机，
+        // 连接方式换成房间的方式（面板 / 窗口都按真人联机显示）。游戏那边看到对手不再是 AI（ai=1 没了）就结束 AI 那局（main.lua）
         void CheckWait()
         {
             var w = waitSes;
             if (w == null || !w.PeerSeen) return;
             var nick = !string.IsNullOrEmpty(w.T.PeerNick) ? w.T.PeerNick : w.Wire.HelloNick;
             waitSes = null;
-            w.AiWaiting = false;     // §220 转正了，不再是 AI 等人的房间（房间列表也不再标"和 AI 对打中"）
+            w.AiWaiting = false;     // 转正了，不再是 AI 等人的房间（房间列表也不再标"和 AI 对打中"）
             if (ai != null) { ai.Stop(); ai = null; }
             if (aiSession != null) { aiSession.Stop(); aiSession = null; }
-            GamePipe.Remove(Path.Combine(dir, "ai"));     // 同 StopSession：AI 的内存交接（§84）不要了
+            GamePipe.Remove(Path.Combine(dir, "ai"));     // 同 StopSession：AI 的内存交接不要了
             if (session != null) session.Stop();
             w.Retarget(dir);
             w.Log = x => { lastLog = DateTime.Now.ToString("HH:mm:ss ") + x; };
@@ -3821,7 +3821,7 @@ namespace ForNet
             Tick();
         }
 
-        // §85 从 AI 对战转来的真人联机（用户："XXXX 已离开房间，AI 对战已重新开始"）：对方断了 BackAfter 秒 →
+        // 从 AI 对战转来的真人联机：对方断了 BackAfter 秒 →
         // 连接方式换回 ai、重开 AI 对战。开关还开着时这个房间退回等人（文件换回 net\wait\，房间号 / 端口不变，
         // 下一个人进来照样转正）；开关关了就关掉房间。自己点"断开"不算（StopSession 清 fromAi）
         bool fromAi;
@@ -3852,7 +3852,7 @@ namespace ForNet
                 s.Retarget(wdir);
                 s.Log = x => { lastLog = DateTime.Now.ToString("HH:mm:ss ") + L.T("[等人的房间] ", "[Room] ") + x; };
                 waitSes = s;
-                s.AiWaiting = true;      // §220 退回等人：排队的人又可以直接叫上场
+                s.AiWaiting = true;      // 退回等人：排队的人又可以直接叫上场
                 waitMode = mode;
             }
             else
@@ -3905,7 +3905,7 @@ namespace ForNet
             if (IsHandleCreated && !IsDisposed) Tick();
         }
 
-        // 游戏内联机面板的命令：id 变了才执行一次。§84 来源两个，各记各的 id：
+        // 游戏内联机面板的命令：id 变了才执行一次。 来源两个，各记各的 id：
         // 游戏经管道发的（内存，每 0.1 秒看一眼不碰硬盘）；cmd.txt（外部工具 / 第二次打开程序写的，FileSystemWatcher 说变了才读；
         // 本程序没开管道时照旧每次读）
         void PollCmd()
@@ -3913,7 +3913,7 @@ namespace ForNet
             var gp = GamePipe.For(dir);
             if (gp != null && gp.Connected)
             {
-                foreach (var t in gp.TakeCmds()) RunCmd(Kv.Parse(t), true);     // §312 按顺序全部执行（以前只看最新一条，同一帧的前一条会丢）
+                foreach (var t in gp.TakeCmds()) RunCmd(Kv.Parse(t), true);     // 按顺序全部执行（以前只看最新一条，同一帧的前一条会丢）
             }
             if (gp == null || cmdFileDirty)
             {
@@ -3936,17 +3936,17 @@ namespace ForNet
                 case "mode": if (d.TryGetValue("mode", out v)) SetMode(v); break;
                 case "host":
                     if (!ConsentGate(cmd, d)) break;
-                    if (d.TryGetValue("bridge", out v) && v == "1" && !AutoBridge("bridge:host")) break;     // §281 桥接好友页"开房（好友可见）"
+                    if (d.TryGetValue("bridge", out v) && v == "1" && !AutoBridge("bridge:host")) break;     // 桥接好友页"开房（好友可见）"
                     if (session == null || session.Role != "host") StartSession("host", null);
-                    break;     // §255.4 A
+                    break;     // A
                 case "join":
-                    if (!ConsentGate(cmd, d)) break;     // §255.4 A
+                    if (!ConsentGate(cmd, d)) break;     // A
                     if (d.TryGetValue("mp", out v) && v == "1") nextMpJoin = true;
-                    Join(d.TryGetValue("target", out v) ? v : "", !(d.TryGetValue("remember", out v) && v == "0")); break;   // §116 remember=0 不记最近
-                case "spectate": if (!ConsentGate(cmd, d)) break; Spectate(d.TryGetValue("target", out v) ? v : ""); break;     // §255.4 A     // §141 观战（先只有局域网 / 输入 IP）
+                    Join(d.TryGetValue("target", out v) ? v : "", !(d.TryGetValue("remember", out v) && v == "0")); break;   // remember=0 不记最近
+                case "spectate": if (!ConsentGate(cmd, d)) break; Spectate(d.TryGetValue("target", out v) ? v : ""); break;     // A     // 观战（先只有局域网 / 输入 IP）
                 case "mphost":     // 多人混战 ②a：开多人房间（n = 连自己几个人，面板给 3–12）；局域网或服务器大厅
                     {
-                        if (!ConsentGate("host", d, true)) break;     // §255.4 A
+                        if (!ConsentGate("host", d, true)) break;     // A
                         int n;
                         if (!d.TryGetValue("n", out v) || !int.TryParse(v, out n)) n = MpCfg.Limit;
                         if (d.TryGetValue("bridge", out v) && v == "1" && !AutoBridge("bridge:host")) break;
@@ -3957,7 +3957,7 @@ namespace ForNet
                     break;
                 case "mpjoin":     // 多人混战 ②a：按多人加入（target = 主机 IP[:端口] 或 房间号）
                     {
-                        if (!ConsentGate("join", d, true)) break;     // §255.4 A
+                        if (!ConsentGate("join", d, true)) break;     // A
                         string target = d.TryGetValue("target", out v) ? v : "";
                         if (!AutoBridge(target)) break;
                         if (Mode != "lan" && Mode != "server" && Mode != "bridge") { Warn(L.T("多人房间仅支持局域网、服务器大厅或桥接", "Multiplayer rooms only support LAN, Server Lobby or Bridge")); break; }
@@ -3974,17 +3974,17 @@ namespace ForNet
                         }
                         else
                         {
-                            var mep = Addr.ParseDirect(target, Session.GamePort);     // §280
+                            var mep = Addr.ParseDirect(target, Session.GamePort);
                             if (mep == null) { Warn(L.T("认不出这个地址：", "Can't resolve this address: ") + target); break; }
                             StartSession("client", mep);
                         }
                     }
                     break;
-                case "duel":       // 新版 1v1（对决）：房主开 / 关对决模式（on=0/1）；§295 没带 cap 时观众上限 = 房间设置"观战 / 排队人数上限"（maxspec）
+                case "duel":       // 新版 1v1（对决）：房主开 / 关对决模式（on=0/1）； 没带 cap 时观众上限 = 房间设置"观战 / 排队人数上限"（maxspec）
                 case "duelset":    // 房主：这一局谁上场（fa= fb=，0 = 没人上场）
                 case "duelphase":  // 房主：开打 / 打完（live=0/1；转发机只在 live=0 时按分数换）
                 case "duellat":    // 只在 --duel-test 时生效：按对注入固定延迟（spec=a-b:ms[:丢包率],…；空 = 清掉）
-                    if (cmd == "duel" && !d.ContainsKey("cap")) d["cap"] = Math.Max(0, MpCfg.Max - 2).ToString();     // 11-15 没带 cap：观众 = 房间人数 − 2（§295 时跟"观战 / 排队人数上限"，现在那项只管旧版 1v1）
+                    if (cmd == "duel" && !d.ContainsKey("cap")) d["cap"] = Math.Max(0, MpCfg.Max - 2).ToString();     // 11-15 没带 cap：观众 = 房间人数 − 2（时跟"观战 / 排队人数上限"，现在那项只管旧版 1v1）
                     DuelCmd(cmd, d);
                     break;
                 case "mptag":
@@ -4001,10 +4001,10 @@ namespace ForNet
                         }
                     }
                     break;
-                case "rotate":     // §141.7 游戏打完一场按规矩换人；§141.8 主机下场时 who = h（第一位）/ c（第二位）谁输了
+                case "rotate":     // 游戏打完一场按规矩换人； 主机下场时 who = h（第一位）/ c（第二位）谁输了
                     if (session != null) { string who; d.TryGetValue("who", out who); session.Rotate(d.TryGetValue("why", out v) ? v : "", who); }
                     break;
-                case "hostdown": if (session != null) session.HostDown(); break;     // §141.8 主机也下场
+                case "hostdown": if (session != null) session.HostDown(); break;     // 主机也下场
                 case "hostspec":
                     if (d.TryGetValue("on", out v))
                     {
@@ -4014,25 +4014,25 @@ namespace ForNet
                         lastLog = DateTime.Now.ToString("HH:mm:ss ") + (HostSpecCfg.On ? L.T("解说模式（主机只观战）已开启", "Host spectate-only enabled") : L.T("解说模式已关闭", "Host spectate-only disabled"));
                     }
                     break;
-                case "specq":      // §141 观战者自己：排队上场（on=1）/ 只观战（on=0）。马上生效（下一个观战握手就带上）
+                case "specq":      // 观战者自己：排队上场（on=1）/ 只观战（on=0）。马上生效（下一个观战握手就带上）
                     if (d.TryGetValue("on", out v)) { SpecCfg.NoQueue = v == "0"; if (v != "0") SpecCfg.WantUp(); cfg.Save(); }     // 切回排队：顺带让主机 / 服务器清掉"刚下场、先别叫"
                     break;
-                case "maxspec":    // §141 房间设置：观战 / 排队人数上限（马上生效：已经在看的超了也不赶，新来的按新上限）
+                case "maxspec":    // 房间设置：观战 / 排队人数上限（马上生效：已经在看的超了也不赶，新来的按新上限）
                     int mx;
-                    // §295 新版 1v1（对决）也用这一项当观众上限，所以放到 16；旧 1v1 是主机一个人转给所有观众，仍按最多 8 个收（SpecCfg.Max）
+                    // 新版 1v1（对决）也用这一项当观众上限，所以放到 16；旧 1v1 是主机一个人转给所有观众，仍按最多 8 个收（SpecCfg.Max）
                     if (d.TryGetValue("n", out v) && int.TryParse(v, out mx) && mx >= 0 && mx <= 16)
                     {
                         cfg.MaxSpec = mx; SpecCfg.Max = Math.Min(mx, SpecCfg.OldMax); cfg.Save();
                         // 11-15 只管旧版 1v1 的观战 / 排队；新版 1v1 的观众 = 房间人数 − 2（mpsize），不再跟这一项
                     }
                     break;
-                case "dz":         // §223.4 房间设置：联机省流（主机的；马上生效，下一个包起）
+                case "dz":         // 房间设置：联机省流（主机的；马上生效，下一个包起）
                     if (d.TryGetValue("on", out v)) { DzCfg.On = v != "0"; cfg.Save(); }
                     break;
                 case "hostup": if (session != null) session.HostUp(); break;
-                case "tospec": ToSpec(); SpecCfg.NoQueue = true; cfg.Save(); break;     // §141 自己下去 → 只观战（服务器大厅那条路也一样）     // §141.7 对手自己下去观战
+                case "tospec": ToSpec(); SpecCfg.NoQueue = true; cfg.Save(); break;     // 自己下去 → 只观战（服务器大厅那条路也一样）     // 对手自己下去观战
                 case "stop": StopSession(); break;
-                // v0.18.6：窗口里能改的设置，游戏内面板也都能改（用户 2026-11-04："所有操作都可以在游戏内实现"）
+                // v0.18.6：窗口里能改的设置，游戏内面板也都能改
                 case "name":
                     if (d.TryGetValue("name", out v) && v.Trim().Length > 0)
                     {
@@ -4054,7 +4054,7 @@ namespace ForNet
                         lastLog = DateTime.Now.ToString("HH:mm:ss ") + (cfg.Secret.Length > 0 ? L.T("联机密码已设置", "Connection password set") : L.T("联机密码已清除", "Connection password cleared"));
                     }
                     break;
-                case "ailevel":   // §75 本地 AI 难度 0–2；对战中也能换
+                case "ailevel":   // 本地 AI 难度 0–2；对战中也能换
                     {
                         int lv;
                         if (d.TryGetValue("level", out v) && int.TryParse(v.Trim(), out lv) && lv >= 0 && lv < LocalAiSupport.LevelCount)
@@ -4067,7 +4067,7 @@ namespace ForNet
                         }
                     }
                     break;
-                case "aiload":   // §114 AI 装备：w=<族>|<路径> e=<影之武装路径或空> o=<皮肤行名或空> med=<0–10> acc=<- 或 GA,GA>；给了哪个改哪个，对战中也能换
+                case "aiload":   // AI 装备：w=<族>|<路径> e=<影之武装路径或空> o=<皮肤行名或空> med=<0–10> acc=<- 或 GA,GA>；给了哪个改哪个，对战中也能换
                     {
                         var nl = cfg.AiLoad.Clone();
                         bool ok = true;
@@ -4079,16 +4079,16 @@ namespace ForNet
                         lastLog = DateTime.Now.ToString("HH:mm:ss ") + L.T("AI 装备已更新", "AI loadout updated");
                     }
                     break;
-                case "airoom":       // §85 AI 对战时同时开房等真人：on=0|1
+                case "airoom":       // AI 对战时同时开房等真人：on=0|1
                     if (d.TryGetValue("on", out v)) SetAiRoom(v == "1");
                     break;
-                case "airoommode":   // §85 等人的房间的连接方式（不能是 ai）
+                case "airoommode":   // 等人的房间的连接方式（不能是 ai）
                     if (d.TryGetValue("mode", out v)) SetAiRoomMode(v);
                     break;
-                case "rankudp":   // §135 测试用：武林盟主照旧走 UDP（假对手 fake_join --ranked 开 / 关）
+                case "rankudp":   // 测试用：排位照旧走 UDP（假对手 fake_join --ranked 开 / 关）
                     if (d.TryGetValue("on", out v)) { Program.RankUdp = v == "1"; lastLog = DateTime.Now.ToString("HH:mm:ss ") + "rankudp=" + v; }
                     break;
-                case "relay":   // §102 的"允许中转"0.34 起没有了（最终方案 3）：命令留着不报错，但只会关
+                case "relay":   // 的"允许中转"0.34 起没有了（最终方案 3）：命令留着不报错，但只会关
                     cfg.Relay = false; cfg.Save();
                     break;
                 case "upnp":
@@ -4107,22 +4107,22 @@ namespace ForNet
                     break;
                 case "copy":
                     {
-                        // §85 AI 对战时开着等人的房间：复制那个房间的地址 / 房间号
+                        // AI 对战时开着等人的房间：复制那个房间的地址 / 房间号
                         var a = waitSes != null ? CopyOf(waitMode, waitSes) : CopyAddr();
-                        if (d.TryGetValue("v6", out v) && v == "1") a = MyV6(session);     // §280 面板"复制我的 IPv6 地址"
+                        if (d.TryGetValue("v6", out v) && v == "1") a = MyV6(session);     // 面板"复制我的 IPv6 地址"
                         if (d.TryGetValue("v4", out v) && v == "1") { string np; a = MyV4(session, out np); }     // 11-15 面板"复制我的 IPv4 地址"
                         if (a.Length == 0 || a.StartsWith(":")) { Warn(L.T("现在没有可复制的地址（", "No address to copy yet (") + MyAddr() + L.T("）", ")")); break; }
                         try { Clipboard.SetText(a); lastLog = DateTime.Now.ToString("HH:mm:ss ") + L.T("已复制：", "Copied: ") + a; }
                         catch (Exception ex) { Warn(L.T("复制失败：", "Copy failed: ") + ex.Message); }
                     }
                     break;
-                case "ranktop":   // §110 排行榜第几页
+                case "ranktop":   // 排行榜第几页
                     {
                         int pg;
                         Rank.RequestTop(d.TryGetValue("page", out v) && int.TryParse(v.Trim(), out pg) ? pg : 1);
                     }
                     break;
-                case "rankstat":   // §110.11 统计页：kind=w 武器 / e 影之武装 / m 招式，page=N
+                case "rankstat":   // 统计页：kind=w 武器 / e 影之武装 / m 招式，page=N
                     {
                         int pg;
                         string kind;
@@ -4130,11 +4130,11 @@ namespace ForNet
                         Rank.RequestStats(kind ?? "w", d.TryGetValue("page", out v) && int.TryParse(v.Trim(), out pg) ? pg : 1);
                     }
                     break;
-                case "rankexport":   // §110 把排位密钥复制到剪贴板（换电脑用）
+                case "rankexport":   // 把排位密钥复制到剪贴板（换电脑用）
                     try { Clipboard.SetText(Rank.ExportKey()); lastLog = DateTime.Now.ToString("HH:mm:ss ") + L.T("排位密钥已复制到剪贴板，别发给别人", "Ranked key copied; keep it private"); }
                     catch (Exception ex) { Warn(L.T("复制失败：", "Copy failed: ") + ex.Message); }
                     break;
-                case "rankimport":   // §110 从剪贴板导入排位密钥
+                case "rankimport":   // 从剪贴板导入排位密钥
                     {
                         string clip = "", why;
                         try { if (Clipboard.ContainsText()) clip = Clipboard.GetText(); } catch (Exception) { }
@@ -4142,7 +4142,7 @@ namespace ForNet
                         else Warn(why);
                     }
                     break;
-                case "bridgetest":   // §125 Steam 连接自检（单机），结果在 net\steam_conn.log
+                case "bridgetest":   // 桥接连接自检（单机），结果在 net\steam_conn.log
                     if (session != null || waitSes != null) Warn(L.T("先断开联机再做桥接自检", "Disconnect before the bridge self-test"));
                     else
                     {
@@ -4153,7 +4153,7 @@ namespace ForNet
                         else Warn(Bridge.Error);
                     }
                     break;
-                case "block":      // §174 拉黑最近第 who 个对手（1 = 当前 / 最近）
+                case "block":      // 拉黑最近第 who 个对手（1 = 当前 / 最近）
                     {
                         var o = OppAt(d);
                         if (o == null) { lastLog = L.T("没有可拉黑的对手（还没收到对方的包）", "No opponent to block yet"); break; }
@@ -4163,7 +4163,7 @@ namespace ForNet
                         // 拉黑的是自己正连着的主机：断开（自己是主机时收包那一层会把他拒掉，不用断）
                         var cs = session;
                         if (cs != null && cs.Role != "host" && recentOpp.Count > 0 && recentOpp[0] == o) StopSession();
-                        // §174.9 自己是服务器大厅的主机、拉黑的是正连着的对手：马上放掉这条连接（房间立刻报空，被拉黑的人再加入时直接被拒）
+                        // 自己是服务器大厅的主机、拉黑的是正连着的对手：马上放掉这条连接（房间立刻报空，被拉黑的人再加入时直接被拒）
                         if (cs != null && cs.Role == "host" && recentOpp.Count > 0 && recentOpp[0] == o)
                         {
                             var sl = cs.T as ServerLink;
@@ -4171,31 +4171,31 @@ namespace ForNet
                         }
                     }
                     break;
-                case "unblock":    // §174 解除黑名单第 i 个（1 起）
+                case "unblock":    // 解除黑名单第 i 个（1 起）
                     {
                         int bi;
                         if (d.TryGetValue("i", out v) && int.TryParse(v, out bi) && Blacklist.Remove(bi - 1)) lastLog = L.T("已从黑名单移除", "Removed from the blacklist");
                     }
                     break;
-                case "safemode":       // 0.34 §2.4 安全模式 L0（本地硬开关）：开 = 断开、只留局域网 / 本地 AI、Steam 全关
+                case "safemode":       // 0.34 安全模式 L0（本地硬开关）：开 = 断开、只留局域网 / 本地 AI、桥接平台全关
                     cfg.Safe = d.TryGetValue("on", out v) && v == "1"; cfg.Save();
                     if (cfg.Safe) { if (session != null && Mode != "lan" && Mode != "ai") StopSession(); if (waitSes != null && waitMode != "lan") StopWait(); if (Mode != "lan" && Mode != "ai") SetMode("lan"); }
                     EnforceLevel();
                     break;
                 case "bridgeroom":      // 0.34 最终方案 3：房间设置"对局走 " + Bridge.Svc（Lua 那边已二次确认 steam_match）
                     {
-                        int bm;     // §279 mode=0/1/2；旧面板发 on=1/0 → 一直桥接 / 关闭
+                        int bm;     // mode=0/1/2；旧面板发 on=1/0 → 一直桥接 / 关闭
                         if (d.TryGetValue("mode", out v) && int.TryParse(v, out bm) && bm >= 0 && bm <= 2) cfg.BridgeMode = bm;
                         else if (d.TryGetValue("on", out v)) cfg.BridgeMode = v == "1" ? 2 : 0;
                         cfg.SyncMeshPrefs();
                         cfg.Save();
                     }
                     break;
-                case "bridgefriends":   // 0.34 最终方案 2：在"最近"页显示 Steam 好友 / 向好友公开"正在开房"（Lua 那边已二次确认 steam_friends）
+                case "bridgefriends":   // 0.34 最终方案 2：在"最近"页显示平台好友 / 向好友公开"正在开房"（Lua 那边已二次确认 steam_friends）
                     cfg.BridgeFriends = d.TryGetValue("on", out v) && v == "1"; cfg.Save(); ApplyPresence();
-                    if (cfg.BridgeFriends && !cfg.Safe && !Bridge.Init()) lastErr = Bridge.Error;     // 0.34 评审：不在 steam 方式下桥从没 Init 过，好友列表会一直空
+                    if (cfg.BridgeFriends && !cfg.Safe && !Bridge.Init()) lastErr = Bridge.Error;     // 0.34 评审：不在桥接平台方式下桥从没 Init 过，好友列表会一直空
                     break;
-                case "mpsize":         // §306 房主在房间里改人数上限（不在多人房 / 不是房主 = 只提示）
+                case "mpsize":         // 房主在房间里改人数上限（不在多人房 / 不是房主 = 只提示）
                     {
                         int n;
                         if (d.TryGetValue("n", out v) && int.TryParse(v, out n)) Session.ApplyMpSize(session, n, m => Warn(m));
@@ -4208,7 +4208,7 @@ namespace ForNet
                             Session.ApplyMpAi(session, n, cfg.AiLevel, cfg.AiLoad, m => Warn(m));
                     }
                     break;
-                case "hideip":         // §294 多人房隐藏我的 IP（下次开 / 进多人房生效）
+                case "hideip":         // 多人房隐藏我的 IP（下次开 / 进多人房生效）
                     cfg.HideIp = d.TryGetValue("on", out v) && v == "1"; MpMesh.HideIpPref = cfg.HideIp; cfg.Save();
                     break;
                 case "hide":           // 0.34 隐身：登记 / 广播不带主机标记，不写富状态
@@ -4224,7 +4224,7 @@ namespace ForNet
                 case "cfgfetch":  // 0.34 最终方案 4：玩家在面板点"获取服务器数值表"（Lua 那边已二次确认）
                     cfgFetch.Request();
                     break;
-                case "refresh":   // §91 游戏内面板打开房间列表页：马上重新问一次房间
+                case "refresh":   // 游戏内面板打开房间列表页：马上重新问一次房间
                     if (Modes.IsServer(Mode)) lobbyList.Refresh();
                     break;
                 case "show":
@@ -4243,7 +4243,7 @@ namespace ForNet
         }
 
         // 安全模式（本地一键，只留局域网 / 本地 AI）开关变了就执行：开 = 关等人房间、断开非局域网 / AI 的会话、方式退回 lan；关 = 恢复富状态。
-        // 服务器下发的下线标志（L1 / L2）X3 删了（docs/EXTENSIONS.md）
+        // 服务器下发的下线标志（L1 / L2）X3 删了
         static string SafeMsg() { return L.T("安全模式：只留局域网 / 本地 AI", "Safe mode: LAN / local AI only"); }
         int enforced = -1;
         void EnforceLevel()
@@ -4262,7 +4262,7 @@ namespace ForNet
             }
         }
 
-        // 0.34 "最近"页的行：历史对手（对上现在的房间 / 好友就给加入目标），再加开了设置时正在开房的 Steam 好友。
+        // 0.34 "最近"页的行：历史对手（对上现在的房间 / 好友就给加入目标），再加开了设置时正在开房的平台好友。
         // 只用当前方式已经在拿的列表（服务器大厅房间 / 局域网广播），不为这一页额外去问服务器
         List<string> RecentRows()
         {
@@ -4290,11 +4290,11 @@ namespace ForNet
                 rows.Add("hist|" + e.Src + "|" + e.At + "|" + Clean(e.Nick) + "|" + target);
                 if (rows.Count >= 40) break;
             }
-            // §281 桥接好友挪到单独一页（lobby.txt fn / f<i>，FriendRows）："最近"只留联机记录
+            // 桥接好友挪到单独一页（lobby.txt fn / f<i>，FriendRows）："最近"只留联机记录
             return rows;
         }
 
-        // 0.34 评审：好友列表 15 秒读一次（§3.1 说的 10–30 秒）；没开"显示桥接好友"、隐身、桥没就绪 = null（不读）
+        // 0.34 评审：好友列表 15 秒读一次（说的 10–30 秒）；没开"显示桥接好友"、隐身、桥没就绪 = null（不读）
         List<string[]> FriendsNow()
         {
             if (!(cfg.BridgeFriends && !cfg.Hide && Bridge.Ready)) return null;
@@ -4302,7 +4302,7 @@ namespace ForNet
             return friendsCache;
         }
 
-        // §281 桥接好友页：fn / f<i> = <1 在开房 | 0 在玩没开房>|<昵称>|<能加入的目标 bridge:<ID>，没开房 = ->；开房的排前面，拉黑的不列
+        // 桥接好友页：fn / f<i> = <1 在开房 | 0 在玩没开房>|<昵称>|<能加入的目标 bridge:<ID>，没开房 = ->；开房的排前面，拉黑的不列
         List<string> FriendRows()
         {
             var rows = new List<string>();
@@ -4329,7 +4329,7 @@ namespace ForNet
             return rows;
         }
 
-        // 可加入目标：开房的 Steam 好友 / 局域网房间 → 剪贴板里的地址 → 最近连过的 → Tailscale 在线节点
+        // 可加入目标：开房的平台好友 / 局域网房间 → 剪贴板里的地址 → 最近连过的 → Tailscale 在线节点
         static string ParseMpCandTag(string raw, out bool isMp)
         {
             isMp = false;
@@ -4348,7 +4348,7 @@ namespace ForNet
                 else if (p.StartsWith("m=")) m = p.Substring(2);
                 else if (p.StartsWith("tm=")) tm = p.Substring(3);
                 else if (p.StartsWith("st=")) st = p.Substring(3);
-                else if (p.StartsWith("ai=")) ai = p.Substring(3);     // §326.4 房主报的 AI 个数（对局外不算人数），面板显示"+ AI N"
+                else if (p.StartsWith("ai=")) ai = p.Substring(3);     // 房主报的 AI 个数（对局外不算人数），面板显示"+ AI N"
             }
             int maxInt;
             isMp = int.TryParse(max, out maxInt) && maxInt >= 2;
@@ -4369,8 +4369,8 @@ namespace ForNet
             {
                 foreach (var f in Bridge.FriendsInGame())
                 {
-                    // §123 没开房的好友单独标 nohost：面板不算"可加入"、排在后面，点了直接提示（以前也标 friend，连过去注定超时）
-                    if (Blacklist.DeniesBridge(Addr.BridgeId(f[0]))) continue;     // §174 拉黑的人
+                    // 没开房的好友单独标 nohost：面板不算"可加入"、排在后面，点了直接提示（以前也标 friend，连过去注定超时）
+                    if (Blacklist.DeniesBridge(Addr.BridgeId(f[0]))) continue;     // 拉黑的人
                     bool isMpRoom = false;
                     string tgStr = "";
                     if (f.Length > 3 && !string.IsNullOrEmpty(f[3]))
@@ -4385,9 +4385,9 @@ namespace ForNet
                     }
                     if (!string.IsNullOrEmpty(tgStr)) candTags[target] = tgStr;
                     add(f[2] == "1" ? (isMpRoom ? "room" : "friend") : "nohost", f[1] + (f[2] == "1" ? (isMpRoom ? "" : L.T("（在开房）", " (hosting)")) : L.T("（在玩，没开房）", " (playing, not hosting)")), target);
-                    // §141 开房的好友再列一行"观战"（好友状态里看不出满没满：满了就看，没满也能先看着排队）
+                    // 开房的好友再列一行"观战"（好友状态里看不出满没满：满了就看，没满也能先看着排队）
                     if (f[2] == "1") add("watchf", f[1], target);
-                    if (f[2] == "1") roomWatch[target] = true;     // §141.14 好友状态看不出认不认观战：照试，主机不认会拒
+                    if (f[2] == "1") roomWatch[target] = true;     // 好友状态看不出认不认观战：照试，主机不认会拒
                 }
             }
             else if (Modes.IsServer(Mode))
@@ -4397,16 +4397,16 @@ namespace ForNet
                 foreach (var r in lobbyList.Poll(cfg.Server))
                 {
                     if (mine != null && mine.RoomId == r[0] && (r.Length < 5 || r[4].Trim().Length == 0)) continue;     // 不列自己开的房间
-                    // §110 第 6 列 = 排位房间（旧服务器没有这列 = 不是）：服务器大厅只列普通房间，武林盟主只列排位房间；第 7 列 = 称号
+                    // 第 6 列 = 排位房间（旧服务器没有这列 = 不是）：服务器大厅只列普通房间，排位只列排位房间；第 7 列 = 称号
                     bool rk = r.Length > 5 && r[5] == "1";
                     if (rk != (Mode == "ranked")) continue;
-                    if (r.Length > 9 && Blacklist.HidesRoom(r[9])) continue;     // §174 第 10 列 = 主机标记：拉黑的人开的房不列
+                    if (r.Length > 9 && Blacklist.HidesRoom(r[9])) continue;     // 第 10 列 = 主机标记：拉黑的人开的房不列
                     var title = rk && r.Length > 6 && r[6].Trim().Length > 0 ? "【" + r[6].Trim() + "】" : "";
-                    // 第 5 列 = 所在服务器（空 = 就是我们连的这台；否则是互通过来的别的服务器，§50）
+                    // 第 5 列 = 所在服务器（空 = 就是我们连的这台；否则是互通过来的别的服务器）
                     var home = r.Length > 4 ? r[4].Trim() : "";
-                    // §141 第 8 列 = 能观战（服务器开了中转、主机认观战）：满了的房间标 watch，点了以观战者身份经服务器看
+                    // 第 8 列 = 能观战（服务器开了中转、主机认观战）：满了的房间标 watch，点了以观战者身份经服务器看
                     bool watch = r[3] == "1" && r.Length > 7 && r[7] == "1";
-                    bool sr = r.Length > 10 && r[10].Trim() == "1";     // 0.34 第 11 列 = 对局走 Steam 的房
+                    bool sr = r.Length > 10 && r[10].Trim() == "1";     // 0.34 第 11 列 = 对局走桥接平台的房
                     roomBridge[r[0].Trim().ToUpperInvariant()] = sr;
                     var target = (watch ? "watch:" : "room:") + r[0] + (home.Length > 0 ? "@" + home : "");
                     bool isMpRoom;
@@ -4418,13 +4418,13 @@ namespace ForNet
                         roomMp[target] = true;
                     }
                     candTags[target] = tgStr;
-                    roomFallback[r[0].Trim().ToUpperInvariant()] = r.Length > 10 && r[10].Trim() == "2";     // §279 = 直连失败时走桥接
-                    roomFbPid[r[0].Trim().ToUpperInvariant()] = ParseHostPidTag(r.Length > 11 ? r[11] : "");     // §329 多人房房主编号（hb=，桥接监听口跟着它）
-                    // §324 新版房间满了 = 观众位也满了（观众算在房间人数里），不再标"观战"（以前点了经服务器转发看）
+                    roomFallback[r[0].Trim().ToUpperInvariant()] = r.Length > 10 && r[10].Trim() == "2";     // = 直连失败时走桥接
+                    roomFbPid[r[0].Trim().ToUpperInvariant()] = ParseHostPidTag(r.Length > 11 ? r[11] : "");     // 多人房房主编号（hb=，桥接监听口跟着它）
+                    // 新版房间满了 = 观众位也满了（观众算在房间人数里），不再标"观战"（以前点了经服务器转发看）
                     add(r[3] != "1" ? (sr ? "sroom" : "room") : watch && !isMpRoom ? "watch" : "full", (home.Length > 0 ? L.T("[互通] ", "[LINKED] ") : "") + title + r[1] + L.T("  地图 ", "  map ") + r[2]
                                 + (r[3] == "1" ? L.T("  已满", "  full") : "") + L.T("  房间号 ", "  code ") + r[0],
                         target);
-                    // §141.14 没满的房间记下能不能观战（"只观战"开着时点它 = 观战）；和 AI 对打时不再单列"观战"行
+                    // 没满的房间记下能不能观战（"只观战"开着时点它 = 观战）；和 AI 对打时不再单列"观战"行
                     if (r[3] != "1") roomWatch["room:" + r[0] + (home.Length > 0 ? "@" + home : "")] = r.Length > 7 && r[7] == "1";
                 }
             }
@@ -4441,10 +4441,10 @@ namespace ForNet
                     string tgStr = ParseMpCandTag(r.Length > 7 ? r[7] : "", out isMpRoom);
                     if (isMpRoom) roomMp[addr] = true;
                     candTags[addr] = tgStr;
-                    // §141 满了、主机又认观战的房间标 watch（面板上能点"观战"），旧版主机的满房照旧 full（灰）
-                    add(r[3] != "1" ? "room" : r[4] == "1" && !isMpRoom ? "watch" : "full",     // §324 同服务器大厅
+                    // 满了、主机又认观战的房间标 watch（面板上能点"观战"），旧版主机的满房照旧 full（灰）
+                    add(r[3] != "1" ? "room" : r[4] == "1" && !isMpRoom ? "watch" : "full",     // 同服务器大厅
                         r[1] + "  " + addr + L.T("  地图 ", "  map ") + r[2] + (r[3] == "1" ? L.T("  已满", "  full") : ""), addr);
-                    if (r[3] != "1") roomWatch[addr] = r[4] == "1";     // §141.14
+                    if (r[3] != "1") roomWatch[addr] = r[4] == "1";
                 }
             }
             if (Mode == "ai") return;     // 本地 AI 没有可加入的目标
@@ -4476,7 +4476,7 @@ namespace ForNet
         // 你的地址（发给朋友）：按连接方式挑
         string MyAddr() { return AddrOf(Mode, session); }
 
-        // m = 连接方式，s = 那种方式的主机连接（§85 等人的房间也用这个）
+        // m = 连接方式，s = 那种方式的主机连接（等人的房间也用这个）
         string AddrOf(string m, Session s)
         {
             switch (m)
@@ -4505,7 +4505,7 @@ namespace ForNet
             }
         }
 
-        // 复制给朋友的那一段：Steam 只要 SteamID64，其余是 IP（广域网带端口）
+        // 复制给朋友的那一段：桥接平台只要平台账号 ID，其余是 IP（广域网带端口）
         string CopyAddr() { return CopyOf(Mode, session); }
 
         string CopyOf(string m, Session s)
@@ -4515,7 +4515,7 @@ namespace ForNet
                 case "bridge": return Bridge.Ready ? Bridge.MyId.ToString() : "";
                 // 房间号；还没登记上（大厅服务器连不上）时复制 公网IP:端口，朋友用"输入 IP 直连"
                 case "server": { var sl = s != null ? s.T as ServerLink : null; return sl == null ? "" : sl.RoomId.Length > 0 ? sl.RoomId : PublicAddr(); }
-                case "ranked": { var sl = s != null ? s.T as IRoomLink : null; return sl == null ? "" : sl.RoomId; }     // §110 排位不能 IP 直连
+                case "ranked": { var sl = s != null ? s.T as IRoomLink : null; return sl == null ? "" : sl.RoomId; }     // 排位不能 IP 直连
                 case "ai": return "";
                 // 局域网：有虚拟网卡（Tailscale / ZeroTier）时复制它——要"发给朋友"的多半不在同一个路由器下，
                 // 同一个路由器下的朋友在房间列表里直接能看到房间，用不着地址
@@ -4524,7 +4524,7 @@ namespace ForNet
         }
 
         // IP 直连用的地址：UPnP 拿到的公网 IP（没有就本机 IP）+ 设置里的端口。
-        // §280 UPnP 没拿到公网 IPv4、本机有公网 IPv6 时给 IPv6（"[v6]:端口"，多半比内网 IPv4 有用）
+        // UPnP 没拿到公网 IPv4、本机有公网 IPv6 时给 IPv6（"[v6]:端口"，多半比内网 IPv4 有用）
         string PublicAddr()
         {
             if (Upnp.PublicIp.Length == 0 && NetBind.V6)
@@ -4535,7 +4535,7 @@ namespace ForNet
             return (Upnp.PublicIp.Length > 0 ? Upnp.PublicIp : (BestIp(0) ?? L.T("公网IP", "public-IP"))) + ":" + cfg.Port;
         }
 
-        // §280 本机的公网 IPv6（发往公网时的源地址，主机回包也从它出去）。状态每秒写好几次，30 秒问一次路由
+        // 本机的公网 IPv6（发往公网时的源地址，主机回包也从它出去）。状态每秒写好几次，30 秒问一次路由
         static IPAddress v6Cache;
         static DateTime v6At = DateTime.MinValue;
         static IPAddress CachedV6()
@@ -4544,7 +4544,7 @@ namespace ForNet
             return v6Cache;
         }
 
-        // §280 "复制我的 IPv6 地址"：开着房就用房间真正监听的端口，没开房按这种方式会监听的端口；没有公网 IPv6 / 关了 IPv6 = ""
+        // "复制我的 IPv6 地址"：开着房就用房间真正监听的端口，没开房按这种方式会监听的端口；没有公网 IPv6 / 关了 IPv6 = ""
         string MyV6(Session s)
         {
             if (!NetBind.V6 || Mode == "ai" || Mode == "ranked" || Modes.IsBridge(Mode)) return "";
@@ -4595,7 +4595,7 @@ namespace ForNet
                            + (Upnp.Status.Length > 0 ? "\n" + Upnp.Status : "")
                            + (lobbyList.Error.Length > 0 ? "\n" + lobbyList.Error : "");
                 case "ranked":
-                    return L.T("武林盟主（排位）：房间登记在大厅服务器上，和服务器大厅一样建房 / 加入，但只列排位房间；对局走桥接（两边都要开着桥接）。打完两边各报结果，对上才记分（Elo，每天同一对人记 3 场）；规则由服务器定（游戏内面板的\"房间设置\"里能看到）。",
+                    return L.T(GameInfo.RankedZh + (GameInfo.RankedZh == "排位" ? "" : "（排位）") + "：房间登记在大厅服务器上，和服务器大厅一样建房 / 加入，但只列排位房间；对局走桥接（两边都要开着桥接）。打完两边各报结果，对上才记分（Elo，每天同一对人记 3 场）；规则由服务器定（游戏内面板的\"房间设置\"里能看到）。",
                                "Ranked: rooms on the lobby server, host / join like the lobby server but only ranked rooms are listed. Both sides report the result; it counts only if they agree (Elo, 3 rated matches per pair per day). The server sets the rules (see Room rules in the in-game panel).")
                            + (Rank.Me.Length > 0 ? "\n" + L.T("我的分数 ", "My rating ") + Rank.Me.Split('|')[0] : "")
                            + (Rank.Error.Length > 0 ? "\n" + Rank.Error : "")
@@ -4613,13 +4613,13 @@ namespace ForNet
             }
         }
 
-        // §141.7 服务器大厅的排队要换连接：观战（WatchLink）轮到上场 → 带口令重新加入；客机被主机换下 → 改成观战连接
+        // 服务器大厅的排队要换连接：观战（WatchLink）轮到上场 → 带口令重新加入；客机被主机换下 → 改成观战连接
         void QueueSwitch()
         {
             var s = session;
             if (s == null) return;
             var wl = s.T as WatchLink;
-            if (wl != null && wl.TurnToken != null && SpecCfg.NoQueue) wl.TurnToken = null;     // §141 只观战：服务器叫上场不理
+            if (wl != null && wl.TurnToken != null && SpecCfg.NoQueue) wl.TurnToken = null;     // 只观战：服务器叫上场不理
             if (wl != null && wl.TurnToken != null && wl.SpecMode)
             {
                 nextToken = wl.TurnToken;
@@ -4638,13 +4638,13 @@ namespace ForNet
             }
         }
 
-        // §174 当前 / 最近的对手（最多 5 个，新的在前），面板拉黑 / 举报用。AI 不算；观战时记的是主机
+        // 当前 / 最近的对手（最多 5 个，新的在前），面板拉黑 / 举报用。AI 不算；观战时记的是主机
         readonly Dictionary<string, bool> roomBridge = new Dictionary<string, bool>();   // 0.34 房间号 → 房主开了"对局走 " + Bridge.Svc（房间列表第 11 列）
         readonly Dictionary<string, bool> roomMp = new Dictionary<string, bool>();
         readonly Dictionary<string, string> candTags = new Dictionary<string, string>();
         string currentMpTag = "m=elim;tm=0;st=idle";
-        readonly Dictionary<string, bool> roomFallback = new Dictionary<string, bool>();     // §279 房间号 → 主机设了"直连失败时走桥接"（列表第 11 列 = 2）
-        readonly Dictionary<string, int> roomFbPid = new Dictionary<string, int>();     // §329 房间号 → 房主编号（列表标签 hb=，没有 = 1）
+        readonly Dictionary<string, bool> roomFallback = new Dictionary<string, bool>();     // 房间号 → 主机设了"直连失败时走桥接"（列表第 11 列 = 2）
+        readonly Dictionary<string, int> roomFbPid = new Dictionary<string, int>();     // 房间号 → 房主编号（列表标签 hb=，没有 = 1）
         static int ParseHostPidTag(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return 1;
@@ -4683,7 +4683,7 @@ namespace ForNet
             return roomBridge.TryGetValue(code, out v) && v;
         }
         readonly List<Opp> recentOpp = new List<Opp>();
-        string autoBridgeFrom;                 // 0.34 从"最近"页连 Steam 好友时临时切到 steam 方式，断开后切回这个
+        string autoBridgeFrom;                 // 0.34 从"最近"页连平台好友时临时切到桥接平台方式，断开后切回这个
         DateTime friendsAt = DateTime.MinValue;
         List<string[]> friendsCache = new List<string[]>();
         Opp OppAt(Dictionary<string, string> d)
@@ -4701,7 +4701,7 @@ namespace ForNet
             var o = new Opp { Uid = s.Wire.PeerUid ?? "", Sh = s.Wire.PeerSh ?? "", Mode = s.Mode, Ver = s.Wire.PeerApp ?? "", Mt = s.LocalMt ?? "" };
             o.Nick = !string.IsNullOrEmpty(t.PeerNick) ? t.PeerNick : !string.IsNullOrEmpty(s.Wire.HelloNick) ? s.Wire.HelloNick : t.PeerName ?? "";
             ulong sid = t is BridgeLink ? ((BridgeLink)t).PeerBridgeId : t is BridgeRoomLink ? ((BridgeRoomLink)t).PeerBridgeId : 0;
-            if (sid != 0 && o.Sh.Length == 0) o.Sh = Ident.BridgeHash(sid);     // Steam 验过的 SteamID，只留哈希（0.34）
+            if (sid != 0 && o.Sh.Length == 0) o.Sh = Ident.BridgeHash(sid);     // 桥接平台验过的平台账号 ID，只留哈希（0.34）
             var rl = t as IRoomLink;
             if (rl != null) { o.Room = rl.RoomId ?? ""; o.Rk = rl.PeerRk ?? ""; }
             if (!o.HasId) return;
@@ -4728,9 +4728,9 @@ namespace ForNet
             if (s != null && s.Mode != "ai" && s.Role != "spec" && s.Connected && !s.Wire.PeerHidden && recentOpp.Count > 0 && recentOpp[0].HasId
                 && ((DateTime.UtcNow - recentOpp[0].First).TotalSeconds >= 45 || (s.LocalMt ?? "").StartsWith("fight")))
                 History.Note(recentOpp[0], s.Mode);
-            // 0.34 从"最近"页连 Steam 好友时临时切到了 steam 方式：断开后切回原来的方式
+            // 0.34 从"最近"页连平台好友时临时切到了桥接平台方式：断开后切回原来的方式
             if (autoBridgeFrom != null && s == null) { var back = autoBridgeFrom; autoBridgeFrom = null; SetMode(back); }
-            // §174 主机说我们在它的黑名单里：断开，别一直重连
+            // 主机说我们在它的黑名单里：断开，别一直重连
             if (s != null && s.Role != "host" && s.Wire.Denied)
             {
                 NetLog.W("被房主拒绝（在对方的黑名单里），断开");
@@ -4756,25 +4756,25 @@ namespace ForNet
                 return;
             }
             var fLocal = Path.Combine(dir, "state_local.txt");
-            var gp = GamePipe.For(dir);      // §83 走管道时 state_local.txt 不再更新
+            var gp = GamePipe.For(dir);      // 走管道时 state_local.txt 不再更新
             bool gameOn = (gp != null && gp.Connected) || File.Exists(fLocal) && (DateTime.Now - File.GetLastWriteTime(fLocal)).TotalSeconds < 3;
             var w = waitSes;
-            // §110 排位：在武林盟主方式下（或正连着排位房间）往来；不在时也每 30 秒问一下服务器开没开排位（决定列不列这个标签）
+            // 排位：在排位方式下（或正连着排位房间）往来；不在时也每 30 秒问一下服务器开没开排位（决定列不列这个标签）
             Consent.ServerAddr = cfg.Server ?? "";     // 0.34：server / ranked 的同意绑定地址
             if (Consent.Has("play"))     // 0.34 评审：没同意过任何一项就不向服务器发包（RTOP 探测也不发）；RHELLO 带昵称 / pid，要同意过 ranked
                 Rank.Poll(cfg.Server, cfg.Name, (Mode == "ranked" || (s != null && s.Mode == "ranked")) && Consent.Has("ranked"), s);
-            // §254（用户 11-12）：排位的规则本来就由服务器定、在"武林盟主"同意里告知；数值表在排位方式下自动拉，不用再点"获取"。普通方式照旧手动
+            // 排位的规则本来就由服务器定、在"排位"同意里告知；数值表在排位方式下自动拉，不用再点"获取"。普通方式照旧手动
             bool rankedAuto = (Mode == "ranked" || (s != null && s.Mode == "ranked")) && !cfg.Safe && Consent.Has("play") && Consent.Has("ranked") && !string.IsNullOrWhiteSpace(cfg.Server);
             if (rankedAuto && (DateTime.UtcNow - cfgAutoAt).TotalSeconds >= 300) { cfgAutoAt = DateTime.UtcNow; if (!cfgFetch.Want) cfgFetch.Request(); }
             else if (!rankedAuto) cfgAutoAt = DateTime.MinValue;
-            cfgFetch.Poll(cfg.Server, dir);     // §158 数值表：面板点了 cfgfetch 才向服务器要（0.34）
+            cfgFetch.Poll(cfg.Server, dir);     // 数值表：面板点了 cfgfetch 才向服务器要（0.34）
             Ext.LocalOnly = cfg.Safe; Ext.Tick();     // X2 插件每轮一次；安全模式下插件的 send 一律拒
             EnforceLevel();
             if (ShownKey != shownSupport && !modeBox.DroppedDown)
             {
                 if (Mode == "ranked" && Rank.Support == 0 && s == null)
                 {
-                    lastLog = DateTime.Now.ToString("HH:mm:ss ") + L.T("这台大厅服务器没开武林盟主排位，换回服务器大厅", "This lobby server has no ranked mode; back to the lobby server");
+                    lastLog = DateTime.Now.ToString("HH:mm:ss ") + L.T("这台大厅服务器没开" + GameInfo.RankedLongZh + "，换回服务器大厅", "This lobby server has no ranked mode; back to the lobby server");
                     cfg.Mode = "server"; cfg.Save();
                 }
                 ApplyLang();     // 重填连接方式下拉框（里面会再调 Tick，shownSupport 已经更新，不会再进来）
@@ -4802,7 +4802,7 @@ namespace ForNet
                 var t = s.T;
                 var gpr = GamePipe.For(dir);
                 var remote = gpr != null && gpr.Connected ? (gpr.LastRemote != null ? Kv.Parse(gpr.LastRemote) : null)
-                                                         : Kv.Read(Path.Combine(dir, "state_remote.txt"));     // §84
+                                                         : Kv.Read(Path.Combine(dir, "state_remote.txt"));
                 string rmap;
                 if (remote != null && remote.TryGetValue("map", out rmap)) s.RemoteMap = rmap;
                 var role = s.Role == "host" ? L.T("主机", "Host") : L.T("客机", "Client");
@@ -4880,7 +4880,7 @@ namespace ForNet
         static string RouteName(string r)
         {
             if (r == "relay") return L.T("服务器中转", "server relay");
-            if (r == "bridge") return L.T("桥接", "bridge");                                               // §135 武林盟主
+            if (r == "bridge") return L.T("桥接", "bridge");                                               // 排位
             if (r == "bridgewait") return L.T("正在经桥接连接", "connecting via bridge");
             if (r == "join") return L.T("向大厅服务器报到", "joining via the lobby server");
             if (r == "direct") return L.T("直连", "direct");
@@ -4911,25 +4911,25 @@ namespace ForNet
             var mhW = sMp ? (s.T as IMpLink) : null;
             kv("mpn", mhW != null ? (s.Role == "host" ? (mhW.MpPlayers().Count + 1).ToString() : mhW.MpSeen.ToString()) : "0");
             kv("mphostaddr", sMp ? s.VisibleMpHostAddr() : "");
-            // 对方昵称优先；还没收到（或对方是旧版）时 Steam 用 Steam 名字，直连为空（面板退回显示地址）
+            // 对方昵称优先；还没收到（或对方是旧版）时桥接平台用桥接平台名字，直连为空（面板退回显示地址）
             var pn = s == null ? "" : (!string.IsNullOrEmpty(s.T.PeerNick) ? s.T.PeerNick : s.T.PeerName);
             var psl = s != null && s.Mode == "ranked" ? s.T as IRoomLink : null;
-            var ptitle = psl != null ? Rank.TitleOf(psl.PeerRk) : "";       // §110 对方是武林盟主：昵称前加称号（称号只由服务器给）
+            var ptitle = psl != null ? Rank.TitleOf(psl.PeerRk) : "";       // 对方是排位：昵称前加称号（称号只由服务器给）
             kv("peername", ptitle.Length > 0 && pn.Length > 0 ? "【" + ptitle + "】" + pn : pn);
             kv("ping", s != null && s.T.PingMs >= 0 ? Kv.F(s.T.PingMs, "0") : "-1");
             kv("port", s == null ? "0" : s.T.LocalPort.ToString());
             kv("myaddr", MyAddr());
-            kv("myv6", MyV6(s));     // §280 有公网 IPv6 时给面板"复制我的 IPv6 地址"（空 = 没有 / 关了）
+            kv("myv6", MyV6(s));     // 有公网 IPv6 时给面板"复制我的 IPv6 地址"（空 = 没有 / 关了）
             { string v4np; kv("myv4", MyV4(s, out v4np)); kv("myv4np", v4np); }     // 11-15 UPnP 拿到的公网 IPv4:端口（空 = 没开 / 没成功）；myv4np=1 路由器报的不是公网地址
             kv("name", cfg.Name);
             kv("cfgport", cfg.Port.ToString());
             kv("upnpon", cfg.Upnp ? "1" : "0");
             kv("relayon", cfg.Relay ? "1" : "0");
-            kv("maxspec", cfg.MaxSpec.ToString());     // §141 房间设置：观战人数上限
-            kv("specnoq", SpecCfg.NoQueue ? "1" : "0");     // §141 只观战、不排队
+            kv("maxspec", cfg.MaxSpec.ToString());     // 房间设置：观战人数上限
+            kv("specnoq", SpecCfg.NoQueue ? "1" : "0");     // 只观战、不排队
             kv("hostspec", HostSpecCfg.On ? "1" : "0");
             kv("roomrules", s != null && !string.IsNullOrEmpty(s.RoomRulesStr) ? s.RoomRulesStr : (s != null && s.Role == "host" ? s.FormatRoomRules() : ""));
-            // §223.4 联机省流：dz = 我当主机时的设置；dzhost = 主机的设置（客机看到的，-1 = 主机没说 / 旧版）；dzact = 这次连接实际在省流
+            // 联机省流：dz = 我当主机时的设置；dzhost = 主机的设置（客机看到的，-1 = 主机没说 / 旧版）；dzact = 这次连接实际在省流
             kv("dz", DzCfg.On ? "1" : "0");
             kv("dzhost", s == null ? "-1" : (s.Role == "host" ? (DzCfg.On ? "1" : "0") : s.T.Wire == null ? "-1" : s.T.Wire.PeerDzHost.ToString()));
             kv("dzact", s != null && s.DzActive ? "1" : "0");
@@ -4937,8 +4937,8 @@ namespace ForNet
             kv("hasai", LocalAiSupport.Has ? "1" : "0");
             kv("mpai", s == null ? "0" : s.MpAiActiveCount.ToString());
             kv("ailevel", cfg.AiLevel.ToString());
-            cfg.AiLoad.LobbyKv(kv);                 // §114 AI 装备（面板按这些值标出当前选的是哪个）；键名归游戏适配（F5）
-            // §85 AI 对战时同时开房等真人：开关、开房方式、房间开着没有（aiwait=1）、房间地址（服务器大厅 = 房间号）
+            cfg.AiLoad.LobbyKv(kv);                 // AI 装备（面板按这些值标出当前选的是哪个）；键名归游戏适配（F5）
+            // AI 对战时同时开房等真人：开关、开房方式、房间开着没有（aiwait=1）、房间地址（服务器大厅 = 房间号）
             var w = waitSes;
             kv("airoom", cfg.AiRoom ? "1" : "0");
             kv("airoommode", cfg.AiRoomMode);
@@ -4949,7 +4949,7 @@ namespace ForNet
             kv("rej", s != null ? s.Wire.Rejected.ToString() : "0");
             kv("hint", s != null ? s.Wire.Hint(true) : "");     // 短句（面板一行放得下）；窗口里是长句
             kv("app", Proto.App);
-            kv("modes", string.Join(",", ShownModes));      // §98 面板只显示联机程序有的方式（发布版没有 Steam 两种）
+            kv("modes", string.Join(",", ShownModes));      // 面板只显示联机程序有的方式（发布版没有桥接平台两种）
             // 服务器大厅：srv = 设置里的地址；route = 线路（direct 直连 / relay 中转 / punch1..3 第几次直连 / wait 主机等人）；
             // room = 自己开的房间号；srverr = 服务器那边的问题（没回应 / 没这个房间），面板没联机时也要能看到
             var sl = s != null ? s.T as IRoomLink : null;
@@ -4959,14 +4959,14 @@ namespace ForNet
             kv("srverr", !Modes.IsServer(Mode) ? "" : sl != null ? sl.Error : lobbyList.Error);
             kv("bridge", Bridge.Ready ? "ok" : (Mode == "bridge" ? Bridge.Error : "off"));
             kv("bridgesvc", Bridge.Name);     // F4c-2 桥接服务的显示名（桥接 DLL 握手报的；面板文案用）
-            // §278：桥在不在（游戏里的桥接 DLL 开了管道 / 已连上）。0.34 起 modes= 不列 bridge，面板以前拿 hasMode("bridge") 判断
-            // "对局走 Steam / 显示 Steam 好友 / 自检"三行显不显示 = 永远不显示；改看这一项
+            // 桥在不在（游戏里的桥接 DLL 开了管道 / 已连上）。0.34 起 modes= 不列 bridge，面板以前拿 hasMode("bridge") 判断
+            // "对局走桥接平台 / 显示平台好友 / 自检"三行显不显示 = 永远不显示；改看这一项
             kv("bridgeav", Modes.ShowBridge && Bridge.Available ? "1" : "0");
             // 0.34 "最近"页：开关 + 行（hn / h<i> = <hist|friend>|<来源>|<时间 unix>|<昵称>|<现在能加入的目标，没有 = ->）
             kv("bridgefriends", cfg.BridgeFriends ? "1" : "0");
             kv("hide", cfg.Hide ? "1" : "0");
-            kv("hideip", cfg.HideIp ? "1" : "0");     // §294
-            kv("bridgeroom", cfg.BridgeMode.ToString());     // §279 0 关闭 / 1 直连失败时走桥接 / 2 一直桥接     // 0.34 房间设置"对局走 " + Bridge.Svc
+            kv("hideip", cfg.HideIp ? "1" : "0");
+            kv("bridgeroom", cfg.BridgeMode.ToString());     // 0 关闭 / 1 直连失败时走桥接 / 2 一直桥接     // 0.34 房间设置"对局走 " + Bridge.Svc
             // 安全模式：olevel 2 = 全关（只留局域网 / 本地 AI）；omsg 原因；safe 开关。（服务器下线标志 L1 X3 删了，olevel 不再有 1）
             kv("olevel", cfg.Safe ? "2" : "0");
             kv("omsg", cfg.Safe ? SafeMsg() : "");
@@ -4974,7 +4974,7 @@ namespace ForNet
             var hist = RecentRows();
             kv("hn", hist.Count.ToString());
             for (int i = 0; i < hist.Count; i++) sb.Append('h').Append(i + 1).Append('=').Append(hist[i]).Append('\n');
-            var frows = FriendRows();     // §281 桥接好友页
+            var frows = FriendRows();     // 桥接好友页
             kv("fn", frows.Count.ToString());
             for (int i = 0; i < frows.Count; i++) sb.Append('f').Append(i + 1).Append('=').Append(frows[i]).Append('\n');
             // 0.34 数值表（手动获取）：cfgst = 上次获取的结果；cfgh / cfgat = 本地缓存 srvcfg.txt 的哈希 / 时间
@@ -4985,16 +4985,16 @@ namespace ForNet
             kv("err", (DateTime.UtcNow - lastErrAt).TotalSeconds < 10 ? lastErr : "");
             kv("msg", lastLog);
             kv("ack", ack ?? "");
-            // §91 房间列表还在取第一份：面板显示"正在获取房间…"（局域网 / Steam 好友是现成的，不用等）
+            // 房间列表还在取第一份：面板显示"正在获取房间…"（局域网 / 平台好友是现成的，不用等）
             kv("listing", Modes.IsServer(Mode) ? (lobbyList.Listing ? "1" : "0") : "0");
             kv("shown", Visible ? "1" : "0");
 #if AOT
-            kv("win", "0");     // §122 游戏进程里的 DLL 没有窗口：面板不显示"打开电脑上的联机窗口"
+            kv("win", "0");     // 游戏进程里的 DLL 没有窗口：面板不显示"打开电脑上的联机窗口"
 #else
             kv("win", "1");
 #endif
-            Rank.WriteLobby(sb, Mode == "ranked");     // §110 rk / rkme / rkrules / rktop / rkt1..
-            // §174 最近的对手 opN = <已拉黑 0/1>|<连接方式>|<几秒前>|<昵称>；黑名单 blN = <连接方式>|<拉黑时间 unix>|<昵称或标识>；rpt = 举报结果
+            Rank.WriteLobby(sb, Mode == "ranked");     // rk / rkme / rkrules / rktop / rkt1..
+            // 最近的对手 opN = <已拉黑 0/1>|<连接方式>|<几秒前>|<昵称>；黑名单 blN = <连接方式>|<拉黑时间 unix>|<昵称或标识>；rpt = 举报结果
             kv("opn", recentOpp.Count.ToString());
             for (int i = 0; i < recentOpp.Count; i++)
             {
@@ -5010,7 +5010,7 @@ namespace ForNet
             // v0.19.1：8 → 40（跟大厅服务器一次给的上限一样），游戏内面板的"房间列表"页自己分页
             int n = Math.Min(cands.Count, 40);
             kv("n", n.ToString());
-            // 目标行自己拼：kv() 会把 | 换掉
+            // 目标行自己拼：kv 会把 | 换掉
             for (int i = 0; i < n; i++)
             {
                 sb.Append('t').Append(i + 1).Append('=').Append(cands[i][0]).Append('|').Append(Clean(cands[i][1])).Append('|').Append(Clean(cands[i][2])).Append('\n');
@@ -5018,12 +5018,12 @@ namespace ForNet
                 if (!candTags.TryGetValue(cands[i][2], out tg) || string.IsNullOrEmpty(tg)) tg = "k=1v1";
                 sb.Append("tg").Append(i + 1).Append('=').Append(tg).Append('\n');
             }
-            GamePipe.Out(Path.Combine(dir, "lobby.txt"), sb.ToString());      // §84 连着管道只在内存里（开着文件镜像才写盘）
+            GamePipe.Out(Path.Combine(dir, "lobby.txt"), sb.ToString());      // 连着管道只在内存里（开着文件镜像才写盘）
         }
 
         // 后台模式（--bg，游戏启动的）：游戏进程没了 3 秒 → 自己退出。
-        // v0.18.6：30 秒 → 3 秒，窗口打开过也退。它算游戏的子进程，在跑时 Steam 认为游戏还开着、拒绝再启动
-        // （18:47 实测：退游戏后马上重开，Steam 报"游戏已在运行"）；v0.18.5 起每次开游戏都会带起它，所以必须跟着游戏一起走
+        // v0.18.6：30 秒 → 3 秒，窗口打开过也退。它算游戏的子进程，在跑时桥接平台认为游戏还开着、拒绝再启动
+        // （18:47 实测：退游戏后马上重开，桥接平台报"游戏已在运行"）；v0.18.5 起每次开游戏都会带起它，所以必须跟着游戏一起走
         public bool NoAutoExit;     // 测试用：给了 --seconds 就到时再退，不看游戏进程
         void AutoExit(bool gameOn)
         {
@@ -5035,16 +5035,16 @@ namespace ForNet
             else if ((DateTime.UtcNow - noGameSince).TotalSeconds > 3) Quit();
         }
 
-        // 退出。2026-11-04 17:28 实测：从没显示过的窗口调 Close() 不触发 FormClosing / FormClosed，后台进程一直不退
-        // （游戏关掉后它还挂在游戏的进程树里，Steam 认为游戏还在运行、拒绝再启动）。显示过的走正常关闭；
+        // 退出。2026-11-04 17:28 实测：从没显示过的窗口调 Close 不触发 FormClosing / FormClosed，后台进程一直不退
+        // （游戏关掉后它还挂在游戏的进程树里，桥接平台认为游戏还在运行、拒绝再启动）。显示过的走正常关闭；
         // 没显示过的自己做 FormClosing 里的收尾，再直接结束消息循环
         bool quitting;
         public void Quit()
         {
             Ext.ShutdownAll();     // X2
             if (quitting) return;
-            // v0.18.7：先立标志再 Close()。19:05 实测窗口打开过时关不掉：Close() → FormClosing → StopSession() → Tick()
-            // → AutoExit → Quit() 又 Close() 一次（窗口正在关）→ 抛异常、这次关闭被取消，进程一直挂着，Steam 不让重开游戏
+            // v0.18.7：先立标志再 Close。19:05 实测窗口打开过时关不掉：Close → FormClosing → StopSession → Tick
+            // → AutoExit → Quit 又 Close 一次（窗口正在关）→ 抛异常、这次关闭被取消，进程一直挂着，桥接平台不让重开游戏
             quitting = true;
             if (Visible) { Close(); return; }
             timer.Stop(); cmdTimer.Stop(); StopSession(); disc.Close(); lobbyList.Close(); cfgFetch.Close(); Bridge.Shutdown();
@@ -5070,7 +5070,7 @@ namespace ForNet
                     var tag = (ni.Name + " " + ni.Description).ToLowerInvariant();
                     foreach (var ua in props.UnicastAddresses)
                     {
-                        // §280 公网 IPv6 只列系统往外发包用的那一个（一张网卡常有固定 + 临时好几个，主机回包用的是这个）；
+                        // 公网 IPv6 只列系统往外发包用的那一个（一张网卡常有固定 + 临时好几个，主机回包用的是这个）；
                         // 排在虚拟局域网后面，BestIp(0/1) 不会挑到它。链路本地 / 内网 IPv6 跨网用不上，不列
                         if (ua.Address.AddressFamily == AddressFamily.InterNetworkV6)
                         {
@@ -5113,21 +5113,21 @@ namespace ForNet
     static class Program
     {
         public static string BaseDir = AppDomain.CurrentDomain.BaseDirectory;   // AOT 版（游戏进程里的 DLL）由 AotEntry 改成 DLL 所在目录
-        // §152 单实例锁 / 管道名后缀：exe 版空（一个 net 目录一个联机程序）；DLL 版是 "_p<游戏 pid>"——沙盒里双开时
+        // 单实例锁 / 管道名后缀：exe 版空（一个 net 目录一个联机程序）；DLL 版是 "_p<游戏 pid>"——沙盒里双开时
         // 两份游戏看到的 net 目录路径一样（文件各在各的沙盒里），锁和管道却是全机共用的，不加 pid 第二份就被当成"已经开着"
         public static string InstanceSalt = "";
         public static bool SimNoDirect;     // --sim-no-direct（测试用，见文件头）
-        // §135 测试用：武林盟主照旧走 UDP（ServerLink，§110 那条路）。离线测试 / 假对手在一台电脑上没法走 Steam（同一个 Steam 账号连不了自己），
+        // 测试用：排位照旧走 UDP（ServerLink， 那条路）。离线测试 / 假对手在一台电脑上没法走桥接平台（同一个桥接平台账号连不了自己），
         // 排位上报 / 记分 / 统计靠它测。--rank-udp 或 cmd=rankudp on=1 打开；不存盘、面板里没有
         public static volatile bool RankUdp;
         public static double SimLoss, SimSkew;   // --sim-loss 0..1 / --sim-skew 秒（测试用，见文件头）
         public static bool SimReorder;           // --sim-reorder（测试用）
         public static bool CliSpec;
         public static string CliHostServer, CliJoinRoom, CliName;
-        public static double CliSpecUpAt = -1;     // --spec-up-at（测试用，§141）：观战者第 N 秒把观战开关切回"排队"
-        public static double CliRotateAt = -1, CliStepDownAt = -1, CliHostDownAt = -1, CliHostUpAt = -1;              // --spectate（测试用，§141）：当观战者连 --spectate 给的主机
-        public static bool CliBridge;             // --steam（测试用，§120.11）：--host 时经 Steam 桥开房
-        public static int LanPort = Session.GamePort;   // --lan-port（测试用，§85.5）：AI 对战时等人的房间用局域网方式时监听的端口，避开开着的游戏占的 27015
+        public static double CliSpecUpAt = -1;     // --spec-up-at（测试用）：观战者第 N 秒把观战开关切回"排队"
+        public static double CliRotateAt = -1, CliStepDownAt = -1, CliHostDownAt = -1, CliHostUpAt = -1;              // --spectate（测试用）：当观战者连 --spectate 给的主机
+        public static bool CliBridge;             // --steam（测试用）：--host 时经桥接 DLL 开房
+        public static int LanPort = Session.GamePort;   // --lan-port（测试用）：AI 对战时等人的房间用局域网方式时监听的端口，避开开着的游戏占的 27015
 
         [STAThread]
         static int Main(string[] args)
@@ -5151,26 +5151,26 @@ namespace ForNet
                 {
                     case "--host": host = true; break;
                     case "--join": join = args[++i]; break;
-                    case "--spectate": join = args[++i]; CliSpec = true; break;     // §141 测试：当观战者连主机
+                    case "--spectate": join = args[++i]; CliSpec = true; break;     // 测试：当观战者连主机
                     case "--mp": MpCfg.Max = Math.Min(int.Parse(args[++i]), MpCfg.Limit); break;     // 多人混战测试：主机的房间收几个人（连自己）
                     // 多人混战测试：按多人加入。两种写法都认：`--mp-join <地址>`（局域网测试）和
-                    // `--mp-join --join steam:<SteamID>`（§238.3 的 Steam 多人房；不带地址时等 --join 给）
+                    // `--mp-join --join 桥接平台:<平台账号 ID>`（的桥接平台多人房；不带地址时等 --join 给）
                     case "--mp-join": MpCfg.Join = true; if (i + 1 < args.Length && !args[i + 1].StartsWith("--")) join = args[++i]; break;
-                    case "--mp-watch": MpCfg.Join = true; MpCfg.JoinWatch = true; if (i + 1 < args.Length && !args[i + 1].StartsWith("--")) join = args[++i]; break;     // §326 测试：按"观战"加入多人房（握手带 watch=1）
+                    case "--mp-watch": MpCfg.Join = true; MpCfg.JoinWatch = true; if (i + 1 < args.Length && !args[i + 1].StartsWith("--")) join = args[++i]; break;     // 测试：按"观战"加入多人房（握手带 watch=1）
                     case "--duel-test": MpMesh.TestInject = true; break;                                  // 对决测试：允许 duellat 命令 / --duel-lat 注入延迟
                 case "--duel-lat": MpMesh.TestInject = true; MpMesh.SetInject(args[++i]); break;      // 对决测试：按对注入固定 RTT（a-b:ms[:丢包率],…，只改测速摘要）
                 case "--mp-block": MpMesh.SetBlock(args[++i]); break;                            // M3 测试：丢掉 a-b 这一对的直连包（a-b:开始秒:结束秒[:丢包率]）
-                    case "--host-server": CliHostServer = args[++i]; host = true; break;   // §141 测试：经大厅服务器开房
-                    case "--join-room": CliJoinRoom = args[++i]; join = "room"; break;     // §141 测试：经大厅服务器加入
+                    case "--host-server": CliHostServer = args[++i]; host = true; break;   // 测试：经大厅服务器开房
+                    case "--join-room": CliJoinRoom = args[++i]; join = "room"; break;     // 测试：经大厅服务器加入
                     case "--name": CliName = args[++i]; break;                              // 测试工具（tests/fake_net_dummy.py）：命令行会话用的昵称，不给 = 电脑名
-                    case "--rotate-at": CliRotateAt = double.Parse(args[++i], CultureInfo.InvariantCulture); break;   // §141.7 测试：主机第 N 秒打完换人
+                    case "--rotate-at": CliRotateAt = double.Parse(args[++i], CultureInfo.InvariantCulture); break;   // 测试：主机第 N 秒打完换人
                     case "--spec-up-at": CliSpecUpAt = double.Parse(args[++i], CultureInfo.InvariantCulture); break;
-                    case "--step-down-at": CliStepDownAt = double.Parse(args[++i], CultureInfo.InvariantCulture); break;   // §141.7 测试：客机第 N 秒下去观战
-                    case "--host-down-at": CliHostDownAt = double.Parse(args[++i], CultureInfo.InvariantCulture); break;   // §141.8 测试：主机第 N 秒下场
+                    case "--step-down-at": CliStepDownAt = double.Parse(args[++i], CultureInfo.InvariantCulture); break;   // 测试：客机第 N 秒下去观战
+                    case "--host-down-at": CliHostDownAt = double.Parse(args[++i], CultureInfo.InvariantCulture); break;   // 测试：主机第 N 秒下场
                     case "--host-up-at": CliHostUpAt = double.Parse(args[++i], CultureInfo.InvariantCulture); break;
                     case "--host-spec": HostSpecCfg.On = true; break;
-                    case "--max-spec": SpecCfg.Max = int.Parse(args[++i]); break;     // §141 测试：观战人数上限
-                    case "--no-queue": SpecCfg.NoQueue = true; break;     // §141 测试：只观战、不排队
+                    case "--max-spec": SpecCfg.Max = int.Parse(args[++i]); break;     // 测试：观战人数上限
+                    case "--no-queue": SpecCfg.NoQueue = true; break;     // 测试：只观战、不排队
                     case "--seconds": seconds = double.Parse(args[++i], CultureInfo.InvariantCulture); break;
                     case "--dir": dir = args[++i]; break;
                     case "--log": log = args[++i]; break;
@@ -5184,8 +5184,8 @@ namespace ForNet
                     case "--rank-udp": RankUdp = true; break;
                     case "--consent-all": Consent.All = true; break;     // 0.34 测试：当 rules.txt 里全同意过（LIST / RTOP / RHELLO / 等人房间不被 Consent 挡）     // 0.34 测试：忽略下线标志
                     case "--loopback": NetBind.Loopback = true; break;
-                    case "--loopback6": NetBind.Loopback = true; NetBind.Loopback6 = true; break;     // §280 测试：主机绑 ::1
-                    case "--no-ipv6": NetBind.V6 = false; break;     // §280 只开 IPv4（和以前一样）
+                    case "--loopback6": NetBind.Loopback = true; NetBind.Loopback6 = true; break;     // 测试：主机绑 ::1
+                    case "--no-ipv6": NetBind.V6 = false; break;     // 只开 IPv4（和以前一样）
                     case "--sim-loss": SimLoss = double.Parse(args[++i], CultureInfo.InvariantCulture); break;
                     case "--sim-reorder": SimReorder = true; break;
                     case "--lan-port": LanPort = int.Parse(args[++i]); break;
@@ -5197,14 +5197,14 @@ namespace ForNet
                 }
             }
             Directory.CreateDirectory(dir);
-            Bridge.LogDir = dir;     // §125 Steam 连接诊断 net\steam_conn.log
+            Bridge.LogDir = dir;     // 桥接连接诊断 net\steam_conn.log
             L.Load(dir);
-            Ident.Load(dir);         // §174 net\uid.txt
-            Blacklist.Load(dir);     // §174 net\blacklist.txt（只在启动时读这一次）
+            Ident.Load(dir);         // net\uid.txt
+            Blacklist.Load(dir);     // net\blacklist.txt（只在启动时读这一次）
             History.Load(dir);       // 0.34 net\history.txt 最近一起玩过的人
             Consent.Init(dir);       // 0.34 评审：联机程序也看 Lua 的同意记录
-            Ext.Load(dir);           // X2 扩展包的联机程序插件 ext/<名>/lobby_<名>.dll（docs/EXTENSIONS.md §4）
-            if (selfTest)    // §125
+            Ext.Load(dir);           // X2 扩展包的联机程序插件 ext/<名>/lobby_<名>.dll
+            if (selfTest)
             {
                 var w2 = new StreamWriter(log ?? Path.Combine(dir, "bridge_selftest_cli.log"), false, Kv.Utf8) { AutoFlush = true };
                 int r2 = Bridge.SelfTestCli(selfTarget, m => w2.WriteLine(DateTime.Now.ToString("HH:mm:ss.fff ") + m));
@@ -5228,17 +5228,17 @@ namespace ForNet
                 if (!bg) Kv.WriteAtomic(Path.Combine(dir, "cmd.txt"), "id=show-" + DateTime.UtcNow.Ticks + "\ncmd=show\n");
                 return 0;
             }
-            NetLog.Start(dir, true);    // §130 非 Steam 方式的连接诊断 net\net_conn.log（上一份改名 net_conn.prev.log）
+            NetLog.Start(dir, true);    // 非桥接平台方式的连接诊断 net\net_conn.log（上一份改名 net_conn.prev.log）
             NetLog.W("联机程序启动：" + NetLog.Build + " v" + Proto.App + (bg ? "（后台）" : "（窗口）"));
-            var pipe = GamePipe.Start(dir, Fnv(Path.GetFullPath(dir).ToLowerInvariant()) + InstanceSalt);   // §83（§152 DLL 版带 pid）
-            pipe.SetDown("lang.txt", "lang=" + (L.En ? "en" : "zh") + "\n");                  // §84 游戏经管道拿语言（只在切换时落盘）
-            // §88 诊断：管道的连上 / 断开 / 出错记进 net\pipe_log.txt（只在这些事发生时写，平时不写）
+            var pipe = GamePipe.Start(dir, Fnv(Path.GetFullPath(dir).ToLowerInvariant()) + InstanceSalt);   // （DLL 版带 pid）
+            pipe.SetDown("lang.txt", "lang=" + (L.En ? "en" : "zh") + "\n");                  // 游戏经管道拿语言（只在切换时落盘）
+            // 诊断：管道的连上 / 断开 / 出错记进 net\pipe_log.txt（只在这些事发生时写，平时不写）
             var pipeLog = Path.Combine(dir, "pipe_log.txt");
             pipe.Log = m => { try { File.AppendAllText(pipeLog, DateTime.Now.ToString("MM-dd HH:mm:ss.fff ") + m + "\r\n", Kv.Utf8); } catch (Exception) { } };
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             var form = new MainForm(dir, backup, guiJoin, bg);
-            var hwnd = form.Handle;   // 后台模式不显示窗口，也要先建好句柄：否则 Close() 不触发 FormClosing / FormClosed
+            var hwnd = form.Handle;   // 后台模式不显示窗口，也要先建好句柄：否则 Close 不触发 FormClosing / FormClosed
             var ctx = new ApplicationContext();
             form.FormClosed += delegate { ctx.ExitThread(); };
             form.NoAutoExit = seconds > 0;
@@ -5264,14 +5264,14 @@ namespace ForNet
 
         internal static int RunCli(bool host, string join, double seconds, string dir, string logPath, bool backup, string secret, int port)
         {
-            new Cfg(dir);     // 0.34 命令行方式也读一次 netcfg：steamfriends / hide 决定 Steam 桥的富状态 / 好友列表开关
+            new Cfg(dir);     // 0.34 命令行方式也读一次 netcfg：steamfriends / hide 决定桥接 DLL 的富状态 / 好友列表开关
             logPath = logPath ?? Path.Combine(dir, "lobby_cli.log");
             var w = new StreamWriter(logPath, false, Kv.Utf8) { AutoFlush = true };
             Action<string> log = m => { lock (w) w.WriteLine(DateTime.Now.ToString("HH:mm:ss.fff ") + m); };
             Safe.OnError = (where, ex) => log("[err] " + where + "：" + ex);      // 命令行测试里线程异常不要静默
             IPEndPoint peer = null;
             ITransport t = null;
-            // §120.11 测试：--steam（主机）/ --join steam:<SteamID64>（客机）走 Steam 桥（tests	est_steam_bridge.py 用假桥）
+            // 测试：--steam（主机）/ --join 桥接平台:<平台账号 ID>（客机）走桥接 DLL（tests	est_steam_bridge.py 用假桥）
             if (CliBridge || (join != null && join.StartsWith("bridge:")))
             {
                 if (!Bridge.Init()) { log(Bridge.Name + "：" + Bridge.Error); w.Close(); return 2; }
@@ -5281,17 +5281,17 @@ namespace ForNet
             }
             else if (CliSpec && join.StartsWith("watch:"))
             {
-                // §141 测试：--spectate watch:<房间号>@<服务器 IP:端口>
+                // 测试：--spectate watch:<房间号>@<服务器 IP:端口>
                 var rest = join.Substring(6);
                 int at = rest.IndexOf('@');
-                var srvW = LobbyServer.Resolve(rest.Substring(at + 1));     // §327 [v6]:端口 / 域名也认
+                var srvW = LobbyServer.Resolve(rest.Substring(at + 1));     // [v6]:端口 / 域名也认
                 if (srvW == null) { log("认不出大厅服务器地址：" + rest.Substring(at + 1)); w.Close(); return 2; }
                 t = new WatchLink(srvW, rest.Substring(0, at), Path.Combine(dir, "state_remote.txt"));
             }
             else if (CliHostServer != null && host)
             {
-                // §141 测试：--host-server <服务器 IP:端口> 经服务器大厅开房（ServerLink），房间号写进日志
-                var srvH = LobbyServer.Resolve(CliHostServer);     // §327 [v6]:端口 / localhost / 域名也认（A + AAAA）
+                // 测试：--host-server <服务器 IP:端口> 经服务器大厅开房（ServerLink），房间号写进日志
+                var srvH = LobbyServer.Resolve(CliHostServer);     // [v6]:端口 / localhost / 域名也认（A + AAAA）
                 if (srvH == null) { log("认不出大厅服务器地址：" + CliHostServer); w.Close(); return 2; }
                 var sl = new ServerLink(srvH, null, port, "CLI", Path.Combine(dir, "state_remote.txt"), false);
                 if (MpCfg.Max >= 2) sl.AllowRelay = false; else sl.AllowRelay = true;
@@ -5299,9 +5299,9 @@ namespace ForNet
             }
             else if (CliJoinRoom != null)
             {
-                // §141 测试：--join-room <房间号>@<服务器 IP:端口> 经服务器大厅加入
+                // 测试：--join-room <房间号>@<服务器 IP:端口> 经服务器大厅加入
                 int at = CliJoinRoom.IndexOf('@');
-                var srvJ = LobbyServer.Resolve(CliJoinRoom.Substring(at + 1));     // §327
+                var srvJ = LobbyServer.Resolve(CliJoinRoom.Substring(at + 1));
                 if (srvJ == null) { log("认不出大厅服务器地址：" + CliJoinRoom.Substring(at + 1)); w.Close(); return 2; }
                 var sl = new ServerLink(srvJ, CliJoinRoom.Substring(0, at), 0, "CLI", Path.Combine(dir, "state_remote.txt"), Program.SimNoDirect);
                 if (MpCfg.Join) sl.AllowRelay = false; else sl.AllowRelay = true;
@@ -5309,12 +5309,12 @@ namespace ForNet
             }
             else if (join != null)
             {
-                // §280 "1.2.3.4[:端口]"、"[v6]:端口"、裸 IPv6 都认
+                // "1.2.3.4[:端口]"、"[v6]:端口"、裸 IPv6 都认
                 peer = Addr.ParseDirect(join, Session.GamePort);
                 if (peer == null) { log("认不出这个地址：" + join); w.Close(); return 2; }
             }
-            NetLog.Start(dir, false);    // §130 测试：两个进程可能共用一个目录，不改名
-            var pipe = GamePipe.Start(dir, Fnv(Path.GetFullPath(dir).ToLowerInvariant()));   // §83（测试里的假游戏也能连）
+            NetLog.Start(dir, false);    // 测试：两个进程可能共用一个目录，不改名
+            var pipe = GamePipe.Start(dir, Fnv(Path.GetFullPath(dir).ToLowerInvariant()));   // （测试里的假游戏也能连）
             pipe.Log = log;
             pipe.SetDown("lang.txt", "lang=" + (L.En ? "en" : "zh") + "\n");
             Session s;
@@ -5367,7 +5367,7 @@ namespace ForNet
                             {
                                 Session.ApplyDuelCmd(s, c, cmdd, log);
                             }
-                            else if (c == "mpsize")     // §306 命令行 / 测试用（游戏面板走 MainForm.RunCmd 那份）
+                            else if (c == "mpsize")     // 命令行 / 测试用（游戏面板走 MainForm.RunCmd 那份）
                             {
                                 string nv; int n;
                                 if (cmdd.TryGetValue("n", out nv) && int.TryParse(nv, out n)) Session.ApplyMpSize(s, n, log);
@@ -5384,7 +5384,7 @@ namespace ForNet
                                 if (cmdd.TryGetValue("level", out lvStr) && int.TryParse(lvStr, out lv) && lv >= 0 && lv < LocalAiSupport.LevelCount)
                                     s.UpdateMpAiConfig(lv, null);
                             }
-                            else if (c == "maxspec")     // §295 观战 / 排队人数上限（命令行 / 测试用；游戏面板走 MainForm.RunCmd 那份）：对决开着时观众上限跟着改
+                            else if (c == "maxspec")     // 观战 / 排队人数上限（命令行 / 测试用；游戏面板走 MainForm.RunCmd 那份）：对决开着时观众上限跟着改
                             {
                                 string nv; int mx;
                                 if (cmdd.TryGetValue("n", out nv) && int.TryParse(nv, out mx) && mx >= 0 && mx <= 16)
@@ -5414,7 +5414,7 @@ namespace ForNet
                 if (DateTime.UtcNow >= upAt) { upAt = DateTime.MaxValue; SpecCfg.NoQueue = false; SpecCfg.WantUp(); log("[lobby] 切回排队"); }
                 if (DateTime.UtcNow >= hdAt) { hdAt = DateTime.MaxValue; log("[lobby] 主机下场：" + s.HostDown()); }
                 if (DateTime.UtcNow >= huAt) { huAt = DateTime.MaxValue; log("[lobby] 主机回来打：" + s.HostUp()); }
-                // §141.7 测试：服务器大厅排队要换连接（同 MainForm.QueueSwitch）
+                // 测试：服务器大厅排队要换连接（同 MainForm.QueueSwitch）
                 var wl = s.T as WatchLink;
                 var sl3 = s.T as ServerLink;
                 ITransport nt = null;

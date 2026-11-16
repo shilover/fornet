@@ -1,4 +1,4 @@
-# fornet 仓库自带测试（11-13 测试分家，HANDOVER §274）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_fornet_host.py
+# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_fornet_host.py
 # F6 fornet 宿主（fornet/lua/fornet_host.lua → 部署成 <模组>\Scripts\main.lua）：lupa 跑真的宿主，假模组目录里放游戏适件。
 # 用法：python -X utf8 -I test_fornet_host.py <lupa 目录>
 # ① 找到 games\demo\，执行适件入口，FORNET.ROOT / GAME_DIR / SCRIPTS 对；适件能 require 自己目录的模块和 Scripts\ 的 fornet_*

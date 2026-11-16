@@ -1,4 +1,4 @@
-// §122 联机程序 DLL 的入口（F5 起 fornet_lobby.dll / fornet_lobby_start，以前 fornet_lobby.dll / fornet_lobby_start）：游戏里的 Lua 用 package.loadlib(dll, "fornet_lobby_start") 拿到这个导出函数再调用（main.lua 的 netuiLaunch）。
+// 联机程序 DLL 的入口（F5 起 fornet_lobby.dll / fornet_lobby_start，以前 fornet_lobby.dll / fornet_lobby_start）：游戏里的 Lua 用 package.loadlib(dll, "fornet_lobby_start") 拿到这个导出函数再调用（main.lua 的 netuiLaunch）。
 // 它的签名和 Lua 的 C 函数一样（int f(lua_State*)），但我们不碰 lua_State，也就不需要 Lua 的 C 接口、不碰 UE4SS 内部：
 // 只起一个后台线程，跑和 `FornetLobby.exe --bg` 完全一样的流程（Program.Main2），返回 0（Lua 那边拿不到返回值）。
 // 已经在跑时再调用什么也不做；那个线程结束了（面板"退出"、出错）再调用就重新起。
@@ -15,7 +15,7 @@ namespace ForNet
     static unsafe class AotEntry
     {
         static int running;
-        static Mutex slot1;     // §153 双开：第一份游戏的 DLL 一直拿着；拿不到 = 我是第二份，用 net2（和 main.lua 的 INST 一致）
+        static Mutex slot1;     // 双开：第一份游戏的 DLL 一直拿着；拿不到 = 我是第二份，用 net2（和 main.lua 的 INST 一致）
         static int slot;
 
         [DllImport("kernel32", SetLastError = true)] static extern bool GetModuleHandleExW(uint flags, IntPtr addr, out IntPtr module);
@@ -57,13 +57,13 @@ namespace ForNet
             try
             {
                 Program.BaseDir = dir;
-                Program.InstanceSalt = "_p" + Environment.ProcessId;   // §152 锁 / 管道按游戏进程区分（沙盒双开）
-                NetLog.Build = "DLL（游戏进程里）";     // §130 net_conn.log 里写
+                Program.InstanceSalt = "_p" + Environment.ProcessId;   // 锁 / 管道按游戏进程区分（沙盒双开）
+                NetLog.Build = "DLL（游戏进程里）";     // net_conn.log 里写
                 Safe.OnError = (where, ex) => err("[" + where + "] " + ex);
                 System.Windows.Forms.Application.ThreadException += ex => err("[loop] " + ex);
                 System.Windows.Forms.Application.Notice += m => err("[notice] " + m);
                 WinTimer.Begin();
-                // §153 不用沙盒双开：第二份游戏也在自己进程里跑 DLL 版，只是 net 目录换成 net2（以前第二份走 exe，面板老是"没响应"）
+                // 不用沙盒双开：第二份游戏也在自己进程里跑 DLL 版，只是 net 目录换成 net2（以前第二份走 exe，面板老是"没响应"）
                 if (slot == 0)
                 {
                     bool created;

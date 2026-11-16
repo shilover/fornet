@@ -31,9 +31,9 @@ python -X utf8 -I tests\run_all.py
 **游戏自己的 C#**（本地 AI 对手、游戏名、开局备份存档等）不放进基底：把 `.cs` 的绝对路径用分号连起来设进环境变量 `FORNET_GAME_CS`，
 `build.bat` 和 AOT 工程都会把它们编进同一个程序集。在里面实现 partial 方法：
 
-- `GameInfo.Configure()`：`ModName / TitleZh / TitleEn / GameZh / GameEn / ProcessName / BackupSave`
+- `GameInfo.Configure`：`ModName / TitleZh / TitleEn / GameZh / GameEn / ProcessName / BackupSave`
 - `LocalAiSupport.Register(ref ILocalAiImpl)`：本地 AI（不实现就没有本地 AI）
-- `WireTag.Configure()`：协议名字（见下）
+- `WireTag.Configure`：协议名字（见下）
 
 接口定义在 `lobby/GameInfo.cs`、`lobby/LocalAiApi.cs`、`lobby/WireTag.cs`。
 
@@ -45,13 +45,13 @@ python -X utf8 -I tests\run_all.py
 房间标记哈希的盐、测试用环境变量的前缀（`FORNET_`）、联机程序插件导出名的前缀（`fnx_`）、桥接管道名的前缀（`fornet_bridge_`）。
 默认都是 4net 的中性名，在 `lobby/WireTag.cs`。**新游戏用默认值就行。**
 
-已经有玩家在用另一套名字的游戏（比如先有了自己的联机模组、后来才换到 4net），在 `WireTag.Configure()` 里把这几样设回原来的，
+已经有玩家在用另一套名字的游戏（比如先有了自己的联机模组、后来才换到 4net），在 `WireTag.Configure` 里把这几样设回原来的，
 线上格式就一个字节都不变，已装的旧版本和已经在跑的服务器照旧能连：
 
 ```csharp
 static partial class WireTag
 {
-    static partial void Configure() { S = "XYZS"; P = "XYZ"; Salt = "xyzmp"; EnvPrefix = "XYZ_"; Abi = "xyzx_"; Pipe = "xyz_bridge_"; }
+    static partial void Configure { S = "XYZS"; P = "XYZ"; Salt = "xyzmp"; EnvPrefix = "XYZ_"; Abi = "xyzx_"; Pipe = "xyz_bridge_"; }
 }
 ```
 

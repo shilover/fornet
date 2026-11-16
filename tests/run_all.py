@@ -1,5 +1,5 @@
-# fornet 仓库自带测试：先编不带任何游戏适配的基底联机程序，再逐个跑（11-13 测试分家，HANDOVER §274）。
-#   python -X utf8 -I tests/run_all.py [lupa 所在目录]
+# fornet 仓库自带测试：先编不带任何游戏适配的基底联机程序，再逐个跑（11-13 测试分家）。
+# python -X utf8 -I tests/run_all.py [lupa 所在目录]
 # 要：Windows 自带的 csc（.NET Framework 4）、node（服务端）、lupa（Lua 测试；没有就跳过那两项）。
 # test_ext_lobby 要先编示例插件（samples/build_hello.bat，要 C 编译器），没有 DLL 就跳过。
 import glob, os, shutil, subprocess, sys, tempfile

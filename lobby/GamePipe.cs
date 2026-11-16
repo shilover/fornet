@@ -1,16 +1,16 @@
-// HANDOVER §83 / §84：游戏 ↔ 联机程序之间的交接走命名管道（内存），不再频繁读写 net\ 下的小文件。
+//  / ：游戏 ↔ 联机程序之间的交接走命名管道（内存），不再频繁读写 net\ 下的小文件。
 // 起因：每秒各写 30 次 state_local.txt / state_remote.txt，读刚被换掉的文件要等杀毒扫描（平均 3.6–6.5 ms、最长 20+ ms，
-// 全压在游戏线程上）；会话 / 面板状态每 0.5 秒重写一次、命令文件每 0.1 秒读一次，白白磨硬盘（用户："不要频繁读写琐碎的硬盘文件"）。
+// 全压在游戏线程上）；会话 / 面板状态每 0.5 秒重写一次、命令文件每 0.1 秒读一次，白白磨硬盘。
 //
 // 两根单向管道（Lua 的 io 库只有阻塞读写，一根双向管道在 C 运行库里读写切换不可靠）：
-//   \\.\pipe\<Name>.up    游戏 → 本程序
-//   \\.\pipe\<Name>.down  本程序 → 游戏
+// \\.\pipe\<Name>.up 游戏 → 本程序
+// \\.\pipe\<Name>.down 本程序 → 游戏
 // 协议（头是 ASCII 行，长度都是 UTF-8 字节数）：
-//   游戏发 "S <n>\n" + n 字节        = 本机状态包（以前的 state_local.txt）
-//   游戏发 "U <文件名> <n>\n" + n 字节 = 以前游戏写的那个文件的新内容（cmd.txt、rel_out.txt）
-//   游戏发 "R\n"  = 要远端状态包 + 有变化的状态文件；"B\n" = 只要有变化的状态文件
-//   本程序马上回 "N <k> <m>\n" + k 个状态包（"<n>\n" + n 字节，旧到新）+ m 个文件（"<文件名> <n>\n" + n 字节，
-//   以前本程序写的 session.txt、lobby.txt、rel_in.txt、lang.txt，只发上次给过之后变了的；刚连上时全给一遍）
+// 游戏发 "S <n>\n" + n 字节 = 本机状态包（以前的 state_local.txt）
+// 游戏发 "U <文件名> <n>\n" + n 字节 = 以前游戏写的那个文件的新内容（cmd.txt、rel_out.txt）
+// 游戏发 "R\n" = 要远端状态包 + 有变化的状态文件；"B\n" = 只要有变化的状态文件
+// 本程序马上回 "N <k> <m>\n" + k 个状态包（"<n>\n" + n 字节，旧到新）+ m 个文件（"<文件名> <n>\n" + n 字节，
+// 以前本程序写的 session.txt、lobby.txt、rel_in.txt、lang.txt，只发上次给过之后变了的；刚连上时全给一遍）
 // 游戏每次 R / B 都等回话（Lua 没有超时），所以回话只在本线程里做、不碰网络、不等别的线程。
 // 游戏怎么找到管道：本程序启动时写 <dir>\pipe.txt（name=…），退出时删。连不上 / 断了，两边都退回文件交接。
 //
@@ -40,7 +40,7 @@ namespace ForNet
         readonly Dictionary<string, string> down = new Dictionary<string, string>();     // 本程序 → 游戏的文件（最新内容）
         readonly Dictionary<string, string> sent = new Dictionary<string, string>();     // 已经给过游戏的内容
         readonly Dictionary<string, string> up = new Dictionary<string, string>();       // 游戏 → 本程序的文件（最新内容）
-        // §312 实测（11-14 22:28）：cmd.txt 以前只留最新一条，游戏同一帧发两条命令（开房后的 duel on=1 + mptag）时，
+        // 实测（11-14 22:28）：cmd.txt 以前只留最新一条，游戏同一帧发两条命令（开房后的 duel on=1 + mptag）时，
         // 本程序 100 ms 才取一次（房主忙时更慢）→ 前一条被后一条盖掉，对决模式没开。改成排队，PollCmd 按顺序全部执行
         readonly Queue<string> cmdQ = new Queue<string>();
         const int CmdQMax = 64;
@@ -188,7 +188,7 @@ namespace ForNet
             lock (qLock) return up.TryGetValue(name, out t) ? t : null;
         }
 
-        // §312 游戏经管道发来、还没执行的命令（cmd.txt），旧到新；取走即清空
+        // 游戏经管道发来、还没执行的命令（cmd.txt），旧到新；取走即清空
         public List<string> TakeCmds()
         {
             var r = new List<string>();

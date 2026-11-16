@@ -1,4 +1,4 @@
-// 多人网状（UDP 房间 bridgemode=1）单对按需升级到桥接的纯决策逻辑与常量（docs/TASK_BRIDGE_AUTO.md）。
+// 多人网状（UDP 房间 bridgemode=1）单对按需升级到桥接的纯决策逻辑与常量。
 // C# 5 语法（Windows 自带 .NET Framework 4 csc.exe 编译；同时兼容 .NET 8 Native AOT）。
 using System;
 using System.Collections.Generic;

@@ -1,10 +1,10 @@
--- fornet_mods.lua：4net 的玩法 mod 机制（docs/FORNET_LAYERS.md 第 3–6 节，L1；宿主 0.3.0）。
--- 宿主在执行游戏适配层之前构造它（适配层也能 provide / use 服务），执行完适配层后调 loadAll() 装 mods\<名>\。
+-- fornet_mods.lua：4net 的玩法 mod 机制（第 3–6 节，L1；宿主 0.3.0）。
+-- 宿主在执行游戏适配层之前构造它（适配层也能 provide / use 服务），执行完适配层后调 loadAll 装 mods\<名>\。
 -- 这里只有机制，不认识任何游戏、不画任何界面：
---   · 扫 mods\、读 manifest、on.txt 才加载、game= / needsFornet / needs= 检查、按依赖拓扑序执行入口
---   · 服务注册（provide / use）、进程内事件总线（on / emit）
---   · 网络频道：可靠事件按 mod 名加前缀、状态包 x.<mod>.<key>= 字段、握手 4n.mods 交换双方装了哪些 mod
---   · 对局占用锁（activity）、键位仲裁（keys）
+-- · 扫 mods\、读 manifest、on.txt 才加载、game= / needsFornet / needs= 检查、按依赖拓扑序执行入口
+-- · 服务注册（provide / use）、进程内事件总线（on / emit）
+-- · 网络频道：可靠事件按 mod 名加前缀、状态包 x.<mod>.<key>= 字段、握手 4n.mods 交换双方装了哪些 mod
+-- · 对局占用锁（activity）、键位仲裁（keys）
 -- 每个回调都 pcall 包着，同一个错误只记一次；没有 mods\ 目录时什么都不做，不改任何现有行为。
 return function(H)
 local S = {
@@ -136,7 +136,7 @@ function S.claimKey(owner, key, label, mods)
     if not cur then S.keys[id] = { owner = owner, label = label } end
     return true
 end
--- 登记 + 绑定：回调进适配层的游戏线程队列（按键回调里直接执行会报 Ref was not function，§v0.12.2）
+-- 登记 + 绑定：回调进适配层的游戏线程队列（按键回调里直接执行会报 Ref was not function）
 function S.bindKey(owner, key, fn, label, mods)
     if type(fn) ~= "function" then out("!! %s 绑键 %s：不是函数", tostring(owner), tostring(label)); return false end
     local ok, who = S.claimKey(owner, key, label, mods)

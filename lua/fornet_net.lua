@@ -1,7 +1,7 @@
--- fornet_net.lua —— fornet（4net）UE4SS 网络核：网络封装（docs/EXTENSIONS.md §10.4 F3c；docs/FORNET_SPLIT.md）。
+-- fornet_net.lua —— fornet（4net）UE4SS 网络核：网络封装（F3c）。
 -- F3c-1：v0.22.0 可靠事件通道 REL（和联机程序经 rel_out.txt / rel_in.txt 交换、按序号确认、去重按序交付）原样搬出。
 -- 事件的处理函数由调用方往 REL.on[<类型>] 里挂（游戏适配 / 对局框架自己的事件类型）；这里只有通道。
--- 用法：local NR = require("fornet_net")({ out=, NET_DIR=, fileWrite=, fileReadKV= })   →  NR.REL / NR.LAT（F3c-3）
+-- 用法：local NR = require("fornet_net")({ out=, NET_DIR=, fileWrite=, fileReadKV= }) → NR.REL / NR.LAT（F3c-3）
 return function(ctx)
 local out = ctx.out or function() end
 local NET_DIR = ctx.NET_DIR or "."
@@ -11,7 +11,7 @@ local N = {}
 
 -- ---- v0.27.0 延迟：A 测量 / B 外推（F3c-3，原 main.lua 段的游戏无关部分；C 追帧 / 前摇学习留在适配层，往同一张表上补）
 -- A 测量：状态包加 ts=<我的毫秒>、tse=<对方最近一包的 ts>:<我收到它之后又过了多少毫秒>，NTP 式四个时间戳算往返和时钟差。
---   在 Lua 层算，两边的驱动节拍和文件邮箱都算在里面；不依赖两台电脑的系统时钟。旧版对方不发 ts = 不知道包龄
+-- 在 Lua 层算，两边的驱动节拍和文件邮箱都算在里面；不依赖两台电脑的系统时钟。旧版对方不发 ts = 不知道包龄
 -- B 外推：pos + vel × min(包龄, EXTRA_MAX)，只动 XY
 local LAT = { N = 32, MAX_RTT = 3000, JUMP = 2000,          -- 往返样本数、超过这个的样本不要、时钟差跳了这么多算对方重启
         EXTRA_MAX = 0.25, EXTRA_ATK = 0.8, EXTRA_HIT = 0.5, EXTRA_TURN = 0.2,     -- 外推上限；出招 / 受击 / 急转后多久内不外推
@@ -139,7 +139,7 @@ function REL.poll()
     local changed = false
     local newLink = false
     if (t.b or "") ~= REL.gb then REL.gb, REL.got, changed, newLink = t.b or "", 0, true, true end   -- 联机程序开了新的一次联机：交付号从 1 重数
-    if newLink and REL.onLink then      -- L1（docs/FORNET_LAYERS.md 第 5 节）：玩法 mod 重新握手
+    if newLink and REL.onLink then      -- L1（第 5 节）：玩法 mod 重新握手
         local ok, err = pcall(REL.onLink)
         if not ok then out("!! 新联机回调出错：%s", tostring(err)) end
     end

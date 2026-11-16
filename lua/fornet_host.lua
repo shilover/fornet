@@ -1,16 +1,16 @@
--- fornet_host.lua：4net 宿主入口（F6，docs/FORNET_F5_F6.md 第 3 节）。部署成 <模组目录>\Scripts\main.lua——UE4SS 只认这个文件。
+-- fornet_host.lua：4net 宿主入口（F6， 第 3 节）。部署成 <模组目录>\Scripts\main.lua——UE4SS 只认这个文件。
 -- 它不认识任何游戏：找到 games\<名字>\ 下的"游戏适件"（manifest.txt），查版本，把 Scripts\ 和适件目录放进 package.path，
 -- 交出全局 FORNET（模组目录 / 适件目录 / 版本 / 日志），然后执行适件的入口。适件是全权限的（要碰游戏对象），一个安装只装一个；
 -- 受限的第三方扩展包另走 ext\（fornet_ext.lua），和这里无关。
 --
 -- 适件 manifest.txt（key=value，一行一个）：
---   name=<名字>          必填，和目录名一致
---   entry=<文件>         入口脚本，默认 main.lua
---   needsFornet=<x.y.z>  需要的宿主版本下限（可选）
---   title=<显示名>       日志里用（可选）
+-- name=<名字> 必填，和目录名一致
+-- entry=<文件> 入口脚本，默认 main.lua
+-- needsFornet=<x.y.z> 需要的宿主版本下限（可选）
+-- title=<显示名> 日志里用（可选）
 -- 选哪个适件：games\games.txt 第一行非注释的名字；没有就按目录名排序取第一个（有多个时记一行日志）。
 -- 列目录优先 games\games.txt（没有 io.popen 的环境 / 想固定顺序），没有再用 dir /b /ad。
-local HOST_VERSION = "0.3.0"     -- 0.2.0：F6 第二步（FORNET.mods / adopt / loop / 接口表检查）；0.3.0：玩法 mod（mods\，fornet_mods.lua，docs/FORNET_LAYERS.md L1）
+local HOST_VERSION = "0.3.0"     -- 0.2.0：F6 第二步（FORNET.mods / adopt / loop / 接口表检查）；0.3.0：玩法 mod（mods\，fornet_mods.lua， L1）
 
 local function log(fmt, ...)
     local ok, s = pcall(string.format, fmt, ...)
@@ -131,7 +131,7 @@ function FORNET.adopt(name, mk)
 end
 
 -- 主循环：每帧检查、按时钟累加到点就跑 tick（平均 min(帧率, 1/sec) 次 / 秒；落后超过 0.1 秒不补）。
--- alive() 为假时这个循环自己停（看门狗重启时旧循环靠它退出）；idle() 每帧在判断到点之前调（空帧里做杂事，比如发上一拍剩下的包）。
+-- alive 为假时这个循环自己停（看门狗重启时旧循环靠它退出）；idle 每帧在判断到点之前调（空帧里做杂事，比如发上一拍剩下的包）。
 -- 没有每帧回调时退到固定间隔，再没有退到异步链。返回用上的方式 "frame" / "delay" / "async"，都没有返回 nil。
 function FORNET.loop.paced(sec, tick, alive, idle)
     if type(LoopInGameThreadAfterFrames) == "function" then
@@ -190,7 +190,7 @@ local function checkAdapter()
         #miss == 0 and "齐" or ("缺 " .. table.concat(miss, " / ")), #mods, table.concat(mods, ", "))
 end
 
--- 0.3.0 玩法 mod 机制（docs/FORNET_LAYERS.md）：在适配层之前构造，适配层也能 provide / use 服务、发事件
+-- 0.3.0 玩法 mod 机制：在适配层之前构造，适配层也能 provide / use 服务、发事件
 do
     local okM, mk = pcall(dofile, ROOT .. "/Scripts/fornet_mods.lua")
     if okM and type(mk) == "function" then

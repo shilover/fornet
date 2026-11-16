@@ -1,23 +1,23 @@
         // AOT 版没有 JavaScriptSerializer：用 System.Text.Json 读同样的字段
         public static List<string[]> Parse(string json)
         {
-            var list = new List<string[]>();
+            var list = new List<string[]>;
             try
             {
                 using (var doc = System.Text.Json.JsonDocument.Parse(json))
                 {
                     System.Text.Json.JsonElement peers;
                     if (!doc.RootElement.TryGetProperty("Peer", out peers) || peers.ValueKind != System.Text.Json.JsonValueKind.Object) return list;
-                    foreach (var kv in peers.EnumerateObject())
+                    foreach (var kv in peers.EnumerateObject)
                     {
                         var n = kv.Value;
                         System.Text.Json.JsonElement on, ips, host;
                         if (!n.TryGetProperty("Online", out on) || on.ValueKind != System.Text.Json.JsonValueKind.True) continue;
                         if (!n.TryGetProperty("TailscaleIPs", out ips) || ips.ValueKind != System.Text.Json.JsonValueKind.Array) continue;
-                        string h = n.TryGetProperty("HostName", out host) && host.ValueKind == System.Text.Json.JsonValueKind.String ? host.GetString() : null;
-                        foreach (var ip in ips.EnumerateArray())
+                        string h = n.TryGetProperty("HostName", out host) && host.ValueKind == System.Text.Json.JsonValueKind.String ? host.GetString : null;
+                        foreach (var ip in ips.EnumerateArray)
                         {
-                            var s = ip.ValueKind == System.Text.Json.JsonValueKind.String ? ip.GetString() : null;
+                            var s = ip.ValueKind == System.Text.Json.JsonValueKind.String ? ip.GetString : null;
                             if (s != null && s.IndexOf(':') < 0) { list.Add(new[] { s, h ?? s }); break; }
                         }
                     }

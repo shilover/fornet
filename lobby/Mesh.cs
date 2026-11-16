@@ -1,4 +1,4 @@
-// 对端表（docs/MESH.md §4 / §9 M1）：把散在 Link / BridgeLink / ServerLink / Session 里的对端状态
+// 对端表（/ M1）：把散在 Link / BridgeLink / ServerLink / Session 里的对端状态
 // （对手、第二位选手、观战者、多人混战玩家、序号去重、最后收包时间、排队先后、刚下场标记、省流编码器、可靠通道占位）收进统一的表。
 // C# 5 语法（Windows 自带 .NET Framework 4 csc.exe 编译）。
 using System;
@@ -17,7 +17,7 @@ namespace ForNet
 
     enum PeerRoute
     {
-        Direct = 0,     // 直连（UDP 端点，或带 Steam 的编译里经 Steam 的连接）
+        Direct = 0,     // 直连（UDP 端点，或带桥接平台的编译里经桥接平台的连接）
         Via = 1,        // 经主机或服务器转发
         Bridge = 2      // 按需升级到桥接通道
     }
@@ -32,7 +32,7 @@ namespace ForNet
     {
         public int Pid;                 // 编号：1 = 对手/主机，2..N = 第二位选手或多人玩家，0 = 观战者
         public PeerRole Role;           // 当前角色
-        public object Handle;           // 传输句柄：IPEndPoint、uint（Steam 连接句柄）或标记对象
+        public object Handle;           // 传输句柄：IPEndPoint、uint（桥接连接句柄）或标记对象
         public PeerRoute Route;         // 路径：Direct / Via
         public int LastSeq = -1;        // 收到的最大状态包序号
         public DateTime LastRx = DateTime.MinValue;     // 最后收包时间（UTC）
@@ -42,7 +42,7 @@ namespace ForNet
         public SpecDelta DzOut;         // 发给该对端的省流编码器（可空）
         public RelChannel Rel;          // 可靠通道占位（M1 可空，M2 拆成每对端一条）
         public string Nick = "";        // 状态包里的昵称（nm=）
-        public ulong BridgeId;           // SteamID64（BridgeLink 用，UDP 为 0）
+        public ulong BridgeId;           // 平台账号 ID（BridgeLink 用，UDP 为 0）
         public double DirectPing { get; set; }  // M2 直连延迟（毫秒，-1 = 未测或不通）
         public double DirectLoss { get; set; }  // M2 直连丢包率（0.0 ~ 1.0）
         public int DirectMaxLoss { get; set; }  // M2 直连最长连续丢包
@@ -479,7 +479,7 @@ namespace ForNet
             }
         }
 
-        // 队首上场当对手（lostSec = 观战保活超时秒数；Steam 传 double.MaxValue 由 SpecTick 统一超时）
+        // 队首上场当对手（lostSec = 观战保活超时秒数；桥接平台传 double.MaxValue 由 SpecTick 统一超时）
         public PeerRow PromoteHead(double lostSec, out PeerRow prevPeer)
         {
             lock (sync)
@@ -685,14 +685,14 @@ namespace ForNet
                         foreach (var ep in extraUsed) used.Add(ep);
                     int pid = 0;
                     int cap = Math.Min(maxPlayers, limitPlayers);
-                    // §316 按人头数挡：房主可以把上限设得比现在的人数少（在的人不赶），这时有空编号也不收，
+                    // 按人头数挡：房主可以把上限设得比现在的人数少（在的人不赶），这时有空编号也不收，
                     // 等人数降到上限以下才收（以前只看 2..cap 里有没有空编号：上限 3、房里 5 人、2 号走了，新人照样能进 2 号）。
                     // 网状（extraUsed 带着在场成员和我自己）= used 就是全部人；旧路径房主自己是 1 号不在 mp 里，补 1
                     int people = used.Count + (extraUsed == null && !used.Contains(1) ? 1 : 0);
                     if (people >= cap) return -1;
                     for (int i = 2; i <= cap; i++)
                         if (!used.Contains(i)) { pid = i; break; }
-                    if (pid == 0 && !used.Contains(1) && (extraUsed == null || extraUsed.Count > 0)) pid = 1;     // §305 网状里 1 号只在真的空着时补（extraUsed 带着在场成员和我自己）
+                    if (pid == 0 && !used.Contains(1) && (extraUsed == null || extraUsed.Count > 0)) pid = 1;     // 网状里 1 号只在真的空着时补（extraUsed 带着在场成员和我自己）
                     if (pid == 0) return -1;
                     var stale = new List<object>();
                     foreach (var kv in mp)
@@ -718,7 +718,7 @@ namespace ForNet
             }
         }
 
-        // 连接断了：把这个多人玩家从表里拿掉（Steam 用；UDP 靠 MpCfg.Lost 超时）
+        // 连接断了：把这个多人玩家从表里拿掉（桥接平台用；UDP 靠 MpCfg.Lost 超时）
         public bool RemoveMp(object handle, out int pid)
         {
             pid = 0;

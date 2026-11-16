@@ -1,4 +1,4 @@
-// F5（docs/FORNET_F5_F6.md）：本地 AI 对手归游戏适配（11-13 拆分）。基底只留这层接口：
+// F5：本地 AI 对手归游戏适配（11-13 拆分）。基底只留这层接口：
 // 开 / 停、难度名、装备配置的透传（netcfg 行 / aiload 命令 / lobby.txt 行），出招逻辑一行都不在基底里。
 // 适配把自己的 .cs 编进同一个程序集（build.bat 的 FORNET_GAME_CS / AOT 的 -p:GameCs），在里面实现 partial 方法 Register 给 Impl 赋值；
 // 没编进来时 Impl 是 null：难度列表为空、装备配置没有任何键、开本地 AI 报"这个版本没有本地 AI"。
@@ -50,10 +50,10 @@ namespace ForNet
         int LevelCount { get; }
         string LevelName(int i);                    // 按当前语言
         IAiLoad NewLoad();
-        // aiDir = AI 那个 Session 的目录（net\ai\）；backFrom = 真人离开后重开时离开的人（§85）
+        // aiDir = AI 那个 Session 的目录（net\ai\）；backFrom = 真人离开后重开时离开的人
         ILocalAi Create(string aiDir, int level, IAiLoad load, string backFrom);
         IMpAiBot CreateMp(int pid, string name, int level, IAiLoad load);
-        string[] SetupLogPrefixes();                // 开局那几行日志的开头：重开 AI 时先不盖掉"XXX 已离开房间"（§127）
+        string[] SetupLogPrefixes();                // 开局那几行日志的开头：重开 AI 时先不盖掉"XXX 已离开房间"
     }
 
     static partial class LocalAiSupport

@@ -1,5 +1,5 @@
-# fornet 仓库自带测试（11-13 测试分家，HANDOVER §274）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_ext.py
-# X1 扩展包（fornet/lua/fornet_ext.lua，F5 前叫 game_ext.lua）：lupa 加载真的模块，基底部分用桩。docs/EXTENSIONS.md / EXTENSIONS_API.md
+# fornet 仓库自带测试（11-13 测试分家）：路径以本目录的上一级为根（私有库里是 fornet/，fornet 仓库里是仓库根）。原件：私有库 tests/test_ext.py
+# X1 扩展包（fornet/lua/fornet_ext.lua，F5 前叫 game_ext.lua）：lupa 加载真的模块，基底部分用桩。 / EXTENSIONS_API.md
 # 用法：python -X utf8 -I test_ext.py <lupa 目录>
 import os, shutil, sys, tempfile
 sys.path.insert(0, sys.argv[1])
@@ -41,7 +41,7 @@ mk("broken", "name=broken\nversion=1\n", "return function(API) error('boom') end
 d = mk("sleepy", "name=sleepy\nversion=1\n", "return function(API) API.status.addField('z', function() return 1 end) end", on=False)
 d = mk("legacy", "name=legacy\nversion=1\n", "return function() end", on=False)     # 旧版只认 off.txt：没有 off.txt 也没有 on.txt → 现在一样是停用
 mk("bad name!", "name=x\n", "return function() end")      # 名字不合法，应被忽略
-mk("api2", "name=api2\nversion=1\napi=2\n", "return function() end")   # §268.2：API 2 的包要能装
+mk("api2", "name=api2\nversion=1\napi=2\n", "return function() end")   # API 2 的包要能装
 mk("api9", "name=api9\nversion=1\napi=9\n", "return function() end")   # 比基底新的 API → bad
 mk("ownr", "name=ownr\nversion=1\napi=2\nconsent=@owned\nadapter=game\nclient=client.lua\n", "return function() end")   # 11-13：@键归属 + 适件代码
 
@@ -72,13 +72,13 @@ EXT = mkext(state.ctx)
 lst = EXT.scan()
 by = {EXT.list[i].name: EXT.list[i] for i in range(1, len(EXT.list) + 1)}
 check(set(by) == {"hello", "evil", "nomanifest", "toonew", "broken", "sleepy", "legacy", "api2", "api9", "ownr"}, "扫描：10 个合法目录名（bad name! 被忽略）", str(sorted(by)))
-check(by["api2"].state == "on", "api=2 → 能装（§268.2）", str(by["api2"].why))
+check(by["api2"].state == "on", "api=2 → 能装", str(by["api2"].why))
 check(by["api9"].state == "bad" and "9" in str(by["api9"].why), "api=9 → bad", str(by["api9"].why))
-# 仓库里随基底发的扩展包，manifest 要的 API 不能比 fornet_ext.lua 的 API_VER 高（§268.2 就是这样漏的）
+# 仓库里随基底发的扩展包，manifest 要的 API 不能比 fornet_ext.lua 的 API_VER 高（就是这样漏的）
 import re
 apiver = int(re.search(r"API_VER = (\d+)", src).group(1))
 csv = int(re.search(r"public const int ApiVersion = (\d+);", open(os.path.join(REPO, "lobby", "Ext.cs"), encoding="utf-8").read()).group(1))
-check(csv == apiver, "Lua fornet_ext.lua API_VER = C# Ext.cs ApiVersion（两边一起升，§268.2）", "Lua %d / C# %d" % (apiver, csv))
+check(csv == apiver, "Lua fornet_ext.lua API_VER = C# Ext.cs ApiVersion（两边一起升）", "Lua %d / C# %d" % (apiver, csv))
 check("an > ApiVersion" in open(os.path.join(REPO, "lobby", "Ext.cs"), encoding="utf-8").read(), "C# 侧也按 manifest api= 拒装比自己新的插件")
 for pk in ("steam", "ranked"):     # 私有库里才有这两个包（fornet 仓库没有，跳过）
     _mf = os.path.join(REPO, "..", "mod", "<mod>", "ext", pk, "manifest.txt")

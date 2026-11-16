@@ -1,6 +1,6 @@
 # 4net 游戏适件接口（F6，2026-11-13；宿主 0.2.0）
 
-> **11-13 起见 `docs/FORNET_LAYERS.md`**：适配层只做游戏适配（游戏 SDK），玩法搬进 `mods\<名>\`（基础联机包 + 往上堆的 mod），宿主 0.3.0 加了 mod 机制（`fornet_mods.lua`）。
+> **注意**：适配层只做游戏适配（游戏 SDK），玩法搬进 `mods\<名>\`（基础联机包 + 往上堆的 mod），宿主 0.3.0 加了 mod 机制（`fornet_mods.lua`）。
 
 > 给"想用 4net 给另一款 UE4SS 游戏做联机"的人看。宿主的实现在 `lua/fornet_host.lua`。这份文档不点名任何具体游戏；一个具体适件和这里各项的对照由那个适件自己的仓库维护。
 > 宿主负责：找到适件、交出目录、执行适件、登记网络核模块实例、跑主循环的调度、检查适件接口表。适件负责：给每个网络核模块它要的游戏钩子（ctx）、每拍做什么、接口表里那几个函数。
@@ -57,7 +57,7 @@
 | `verCmp(a, b)` | 版本比较（-1 / 0 / 1） |
 | `adopt(name, mk)` | 包一层网络核模块的构造函数：构造一次、实例登记到 `mods[name]`（0.2.0） |
 | `mods` | 已登记的网络核模块实例：`mods.fornet_match` 等（0.2.0） |
-| `loop.paced(sec, tick, alive, idle)` | 主循环调度：每帧检查、按时钟累加到点跑 `tick`、落后超过 0.1 秒不补；`alive()` 假时循环自己停；`idle()` 每帧先调。退路：固定间隔 → 异步链。返回 `"frame"` / `"delay"` / `"async"` / nil（0.2.0） |
+| `loop.paced(sec, tick, alive, idle)` | 主循环调度：每帧检查、按时钟累加到点跑 `tick`、落后超过 0.1 秒不补；`alive` 假时循环自己停；`idle` 每帧先调。退路：固定间隔 → 异步链。返回 `"frame"` / `"delay"` / `"async"` / nil（0.2.0） |
 | `loop.frame(fn)` / `loop.async(ms, fn)` | 每帧（游戏线程）/ 异步定时；没有这个能力返回 false（0.2.0） |
 | `adapter` | **适件设**：接口表（第 4 节），宿主执行完入口后检查、记一行 |
 | `IFACE` | 接口表要的键名列表 |
@@ -71,11 +71,11 @@
 | 键 | 是什么 |
 |---|---|
 | `name` / `version` | 适件名字 / 版本 |
-| `tick()` | 每拍做什么（宿主 `loop.paced` 按拍调） |
+| `tick` | 每拍做什么（宿主 `loop.paced` 按拍调） |
 | `makePacket(p1, tn)` | 生成并发出我的状态包 |
 | `applyPacket(p1, tn)` | 收对方的包、驱动替身 |
-| `spawnPuppet()` / `removePuppet()` | 生成 / 收起替身 |
-| `matchDeps()` | 返回 `{ step =, follow = }`：对局框架回调游戏的钩子表（倒下、关输入、归位、无敌、清状态…），给 `fornet_match.hostStep / clientStep / followHost` |
+| `spawnPuppet` / `removePuppet` | 生成 / 收起替身 |
+| `matchDeps` | 返回 `{ step =, follow = }`：对局框架回调游戏的钩子表（倒下、关输入、归位、无敌、清状态…），给 `fornet_match.hostStep / clientStep / followHost` |
 | `onMapChange(...)` | 切图前：冻结循环、藏替身、丢旧引用 |
 
 宿主缺哪项会在控制台写"接口表缺 …"，但照样跑——接口表是给扩展、工具和以后的第二个适件认的约定，不是开关。
@@ -109,14 +109,14 @@ FMATCH = mk({ out = out, MATCH = MATCH, ... })
 ### 4.4 主循环
 
 调度在宿主（`FORNET.loop.paced`，和老代码一字不差地搬过去）；每拍做什么、空帧里补发上一拍的包、看门狗诊断（卡在管道里没有）还是适件的。
-看门狗重启主循环时给新的代号，旧循环靠 `alive()` 返回假自己退出。没有宿主时（老布局 / 测试）适件走自己原来那份调度。
+看门狗重启主循环时给新的代号，旧循环靠 `alive` 返回假自己退出。没有宿主时（老布局 / 测试）适件走自己原来那份调度。
 
 ## 5. 联机程序里的游戏代码（C#）
 
 联机程序基底不认识游戏。适件要往里加东西（本地 AI、游戏名、备份存档）就写 C#，编进同一个程序集：
 
 - 环境变量 `FORNET_GAME_CS` = 分号分隔的 `.cs` 绝对路径；`lobby\build.bat` 和 `lobby\aot\` 工程都读它。
-- 在自己的 .cs 里实现 partial 方法：`GameInfo.Configure()`（`ModName / TitleZh / TitleEn / GameZh / GameEn / ProcessName / BackupSave`）、`LocalAiSupport.Register(ref ILocalAiImpl)`（本地 AI）。没实现就是基底默认值、没有本地 AI。
+- 在自己的 .cs 里实现 partial 方法：`GameInfo.Configure`（`ModName / TitleZh / TitleEn / GameZh / GameEn / ProcessName / BackupSave`）、`LocalAiSupport.Register(ref ILocalAiImpl)`（本地 AI）。没实现就是基底默认值、没有本地 AI。
 
 ## 6. 版本
 

@@ -1,18 +1,18 @@
-// Ext.cs —— X2 扩展包的联机程序插件（docs/EXTENSIONS.md §4 方案 a；接口文档 docs/EXTENSIONS_API.md）
+// Ext.cs —— X2 扩展包的联机程序插件（方案 a；接口文档 docs/EXTENSIONS_API.md）
 // 每个扩展包可带一个 C ABI 的 ext\<名>\lobby_<名>.dll，导出：
-//   int  fnx_init(const FnxCtx* ctx)      // 返回 0 = 成功
-//   void fnx_cmd(const char* kvUtf8)       // 游戏面板 / Lua 经 API.lobby.cmd 发来的 k=v\n 文本
-//   void fnx_tick(void)                    // 联机程序主循环每轮一次（~10 Hz）
-//   void fnx_shutdown(void)
+// int fnx_init(const FnxCtx* ctx)      // 返回 0 = 成功
+// void fnx_cmd(const char* kvUtf8)       // 游戏面板 / Lua 经 API.lobby.cmd 发来的 k=v\n 文本
+// void fnx_tick(void)                    // 联机程序主循环每轮一次（~10 Hz）
+// void fnx_shutdown(void)
 // FnxCtx（只追加字段、不改序；version 现在 1）：
-//   int32 version; int32 id; 然后 6 个函数指针，都是 cdecl：
-//   void log(int id, const char* utf8)
-//   int  consent(int id, const char* consentId)                       // 玩家同意过这个包的 <consentId> 没（ext_<名>_<id>）
-//   int  send(int id, const char* addr, const uint8_t* buf, int len)  // UDP 发到 "host:port"；本包登记的同意键一个没同意就拒（返回 <0）
-//   int  recv(int id, char* addrOut, int addrCap, uint8_t* buf, int cap)   // 收自己 socket 上的包（非阻塞；0 = 没有）
-//   void reply(int id, const char* k, const char* v)                  // 给面板 / Lua：lobby.txt 里 x.<名>.<k>=<v>
-//   const char* name(int id)                                          // 自己的包名
-//   int  resolve(int id, const char* addr, char* out, int cap)        // API 2："域名或IP[:端口]" → "ip:port"（返回长度，0 = 认不出）
+// int32 version; int32 id; 然后 6 个函数指针，都是 cdecl：
+// void log(int id, const char* utf8)
+// int consent(int id, const char* consentId)                       // 玩家同意过这个包的 <consentId> 没（ext_<名>_<id>）
+// int send(int id, const char* addr, const uint8_t* buf, int len)  // UDP 发到 "host:port"；本包登记的同意键一个没同意就拒（返回 <0）
+// int recv(int id, char* addrOut, int addrCap, uint8_t* buf, int cap)   // 收自己 socket 上的包（非阻塞；0 = 没有）
+// void reply(int id, const char* k, const char* v)                  // 给面板 / Lua：lobby.txt 里 x.<名>.<k>=<v>
+// const char* name(int id)                                          // 自己的包名
+// int resolve(int id, const char* addr, char* out, int cap)        // API 2："域名或IP[:端口]" → "ip:port"（返回长度，0 = 认不出）
 // 隔离：插件只能经 send 发包，而 send 查同意、查"仅本地模式"；插件拿不到基底的 socket / 会话 / 配置。
 // 插件崩了会把联机程序一起带走（同一进程），所以 init 前先写日志，出事能从 net\lobby_errors.log 看到是哪个包。
 using System;
@@ -79,7 +79,7 @@ namespace ForNet
         }
         static Plugin Of(int id) { return id >= 0 && id < list.Count ? list[id] : null; }
         static string Tag(Plugin p) { return "[ext:" + p.Name + "] "; }
-        // manifest consent= / 插件问的键：平时是本包的 ext_<名>_<键>；"@<键>" 指基底自己的同意键（排位插件用 @ranked = 面板"武林盟主"那一项，不另弹一次）
+        // manifest consent= / 插件问的键：平时是本包的 ext_<名>_<键>；"@<键>" 指基底自己的同意键（排位插件用 @ranked = 面板"排位"那一项，不另弹一次）
         static string ConsentKey(Plugin p, string c) { return c.StartsWith("@") ? c.Substring(1) : "ext_" + p.Name + "_" + c; }
 
         // ---------------------------------------------------------------- 回调（插件 → 基底）
@@ -158,7 +158,7 @@ namespace ForNet
             var p = Of(id); if (p == null || outp == IntPtr.Zero || cap < 2) return -1;
             try
             {
-                var ep = LobbyServer.Resolve4(Utf8(addr)); if (ep == null) return 0;     // §327 插件只认 ip:port，照旧只给 IPv4
+                var ep = LobbyServer.Resolve4(Utf8(addr)); if (ep == null) return 0;     // 插件只认 ip:port，照旧只给 IPv4
                 var b = Encoding.ASCII.GetBytes(ep.Address + ":" + ep.Port);
                 var m = Math.Min(b.Length, cap - 1); Marshal.Copy(b, 0, outp, m); Marshal.WriteByte(outp, m, 0);
                 return m;
@@ -174,7 +174,7 @@ namespace ForNet
             catch (Exception) { }
             return d;
         }
-        // netDir = <mod>\net；扩展包在 <mod>\ext\<名>\，玩法 mod 在 <mod>\mods\<名>\（docs/FORNET_LAYERS.md：mod 也能带联机程序插件，
+        // netDir = <mod>\net；扩展包在 <mod>\ext\<名>\，玩法 mod 在 <mod>\mods\<名>\（：mod 也能带联机程序插件，
         // 比如排位 mods\ranked\lobby_ranked.dll；同一套 C ABI、同一个同意检查）。只装 manifest 里有 lobby= 的（或目录里有 lobby_<名>.dll 的）。
         // 两处同名时先到先得（ext 在前；Lua 侧 fornet_mods.lua 不让 mod 和插件同名）。mod 的依赖是否满足只有 Lua 侧知道，这里只看 on.txt
         public static void Load(string netDir)
@@ -198,7 +198,7 @@ namespace ForNet
                 if (list.Exists(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase))) { NetLog.W("[ext:" + name + "] ext\\ 和 mods\\ 同名，只装先到的那个"); continue; }
                 if (!File.Exists(Path.Combine(d, "on.txt"))) continue;          // 11-13：默认停用，有 on.txt 才装（面板插件页"启用"写它，重启生效）
                 var mf = Manifest(Path.Combine(d, "manifest.txt"));
-                // 11-13（§268.2 的 C# 侧）：manifest 要的接口比这个联机程序新就不装（Lua 侧 fornet_ext.lua 同样判；两边的号由 test_ext 卡成一样）
+                // 11-13（的 C# 侧）：manifest 要的接口比这个联机程序新就不装（Lua 侧 fornet_ext.lua 同样判；两边的号由 test_ext 卡成一样）
                 string av; int an;
                 if (mf.TryGetValue("api", out av) && int.TryParse(av.Trim(), out an) && an > ApiVersion)
                 {
