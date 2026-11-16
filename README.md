@@ -1,14 +1,32 @@
 # 4net (fornet)
 
-[中文](README.md)
+[中文](README.zh.md)
 
 A game-agnostic online-play foundation for UE4SS Lua mods. "4net" reads "for net"; it is not a .NET library.
 
 It was extracted from a game multiplayer mod that is already in players' hands. Everything that does not depend on a particular game lives
 here: networking, rooms, a reliable channel, a consent gate, mod loading. How *that* game spawns an opponent, plays a move or deals damage
-is written by each game's own **adapter**; game modes (1v1, spectating, multiplayer, …) are written as **play mods**.
+is written by each game's own **adapter**; game modes (1v1, spectating, multiplayer, …) are written as **play mods**, and any number of
+them share one 4net install and one connection (see [Many mods, one network](#many-mods-one-network)).
 
 > **Status: preview.** One game uses it so far, and the interfaces will still change. Code comments are mostly Chinese development notes.
+
+## Many mods, one network
+
+Install 4net once and any number of play mods share it. There is one host, one lobby helper and one connection to each other player,
+no matter how many mods are installed; each mod plugs into that instead of bringing its own networking:
+
+- **Separate channels on the same connection**: each mod's reliable events go out with its name as a prefix (`<mod>.<kind>`), and each mod can
+  add its own fields to the per-tick state packet (`x.<mod>.<key>=`). Mods never see or collide with each other's traffic.
+- **Mod lists are exchanged in the handshake**: each side tells the other which mods it has enabled; a mod's events are only sent to players
+  who have that mod too (`M.net.peerHas(name)` tells a mod whether the other side has it).
+- **Mods cooperate through services and events** (`M.provide` / `M.use`, `M.on` / `M.emit`): a base play mod offers the panel and the match
+  framework, and spectate / multiplayer / your own mode build on it.
+- **Shared resources are arbitrated**: only one mode drives the puppet or blocks input at a time (`M.activity.acquire`), and a key that one
+  mod already bound is refused to a second one.
+- **One consent gate for all of them**: whichever mod or extension asks to send data, nothing leaves without the player's consent.
+
+Mods are folders under `mods\` of the same install; players enable or disable each one (`on.txt`) without touching the others.
 
 ## How it works
 
@@ -110,7 +128,7 @@ play mod, live in `mods\<base pack>\` and are built by it.
 | Lobby server | `server/` | Node.js on one UDP port: room list, hole-punch introductions, optional relay. Built-in modules only; self-hostable |
 | Sample extension | `samples/hello/` | A minimal extension: Lua + a lobby plugin written in C |
 | Tests | `tests/` | `python -X utf8 -I tests/run_all.py`: builds the base and runs 8 offline suites |
-| Docs | `docs/` | [Usage guide](docs/USAGE.en.md) (build, install, how to write each layer, server), [adapter hooks](docs/FORNET_ADAPTER.md), [extension API](docs/EXTENSIONS_API.md) (both Chinese); [lobby server](server/README.en.md) |
+| Docs | `docs/` | [Usage guide](docs/USAGE.en.md) (build, install, how to write each layer, server), [adapter hooks](docs/FORNET_ADAPTER.md), [extension API](docs/EXTENSIONS_API.md) (both Chinese); [lobby server](server/README.md) |
 
 ## Wire names
 

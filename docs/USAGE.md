@@ -175,7 +175,7 @@ node server/fornet-lobby-server.mjs --relay             # 打洞不通时替双�
 node server/fornet-lobby-server.mjs --upstream other.example.org:27020   # 和别的服务器互通房间列表
 ```
 
-不存盘，重启后房间靠主机的心跳自己补回来。完整参数和协议见 [server/README.md](../server/README.md) 和服务端文件开头的注释。
+不存盘，重启后房间靠主机的心跳自己补回来。完整参数和协议见 [server/README.zh.md](../server/README.zh.md) 和服务端文件开头的注释。
 客户端**不预设任何服务器地址**：玩家自己填。
 改过协议名字的游戏：启动时给 `--wire-server` / `--wire-peer`（再加 `--wire-alias 4N` 就也认中性名的客户端），
 或者在自己的发布脚本里把服务端文件中标着 `@wire-defaults` 的那一行换成自己的默认值。

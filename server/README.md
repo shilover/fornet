@@ -1,6 +1,6 @@
 # 4net lobby server
 
-[中文](README.md)
+[中文](README.zh.md)
 
 The server behind the "lobby server" connection mode. It does three things only:
 

@@ -185,7 +185,7 @@ node server/fornet-lobby-server.mjs --upstream other.example.org:27020   # share
 ```
 
 Nothing is written to disk; after a restart rooms come back with the hosts' heartbeats. All options and the protocol are in
-[server/README.en.md](../server/README.en.md) and the comment at the top of the server file.
+[server/README.md](../server/README.md) and the comment at the top of the server file.
 The client **ships with no server address**: players enter one themselves.
 A game with its own wire names starts the server with `--wire-server` / `--wire-peer` (add `--wire-alias 4N` to also accept neutral
 clients), or has its release script replace the line marked `@wire-defaults` in the server file with its own defaults.

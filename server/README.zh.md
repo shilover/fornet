@@ -1,6 +1,6 @@
 # 4net 大厅服务器
 
-[English](README.en.md)
+[English](README.md)
 
 "服务器大厅"连接方式用的服务端。只做三件事：
 
