@@ -4715,7 +4715,29 @@ namespace ForNet
             }
             old.Last = now;
             recentOpp.Insert(0, old);
-            if (recentOpp.Count > 5) recentOpp.RemoveAt(5);
+            if (recentOpp.Count > OPP_MAX) recentOpp.RemoveAt(OPP_MAX);
+        }
+
+        // 房间里的每位真人也进"最近对手"（以前只记 1v1 的那一个对手，房里遇到的人没法拉黑 / 举报）。已在列表里只更新时间，不挪顺序
+        const int OPP_MAX = 12;
+        DateTime membersNotedAt = DateTime.MinValue;
+        void NoteMembers(Session s)
+        {
+            if (s == null || s.Mode == "ai") return;
+            var ml = s.T as IMpLink;
+            if (ml == null || ml.Mesh == null) return;
+            var now = DateTime.UtcNow;
+            if ((now - membersNotedAt).TotalSeconds < 2.0) return;
+            membersNotedAt = now;
+            foreach (var m in ml.Mesh.MemberIds())
+            {
+                var o = new Opp { Uid = m[1], Nick = m[2], Mode = s.Mode };
+                var old = recentOpp.Find(x => x.Same(o));
+                if (old != null) { old.Last = now; if (o.Nick.Length > 0) old.Nick = o.Nick; continue; }
+                o.First = now; o.Last = now;
+                recentOpp.Insert(0, o);
+                if (recentOpp.Count > OPP_MAX) recentOpp.RemoveAt(OPP_MAX);
+            }
         }
 
         void Tick()
@@ -4724,6 +4746,7 @@ namespace ForNet
             QueueSwitch();
             s = session;
             NoteOpp(s);
+            NoteMembers(s);
             // 0.34 最近一起玩过：连着的真人连了 45 秒以上 / 已开打才记（本地 history.txt，不上传）
             if (s != null && s.Mode != "ai" && s.Role != "spec" && s.Connected && !s.Wire.PeerHidden && recentOpp.Count > 0 && recentOpp[0].HasId
                 && ((DateTime.UtcNow - recentOpp[0].First).TotalSeconds >= 45 || (s.LocalMt ?? "").StartsWith("fight")))

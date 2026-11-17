@@ -1612,7 +1612,8 @@ local function netuiStatus(lb, tn)
     local route = NETUI.viaServer(lb.mode) and netRouteName(lb.route) or nil
     if conn then
         local ping = (U.pingMs and U.pingMs()) or tonumber(lb.ping) or -1     -- F3b-5：往返毫秒由适配层给（LAT），没有就用联机程序的
-        local ha = (lb.mp == "1" and (lb.mphostaddr or "") ~= "") and (T("  房主地址 ", "  HOST ") .. clipText(lb.mphostaddr, 28)) or ""
+        local ha = (lb.mp == "1" and (lb.room or "") ~= "") and (T("  房间号 ", "  ROOM ") .. lb.room)
+                   or (lb.mp == "1" and (lb.mphostaddr or "") ~= "") and (T("  房主地址 ", "  HOST ") .. clipText(lb.mphostaddr, 28)) or ""
         return T("已连接 ", "CONNECTED ") .. clipText(who, 18) .. (ping >= 0 and string.format("  %dms", ping) or "")
                .. (route and ("  " .. route) or "") .. ha
                .. (lb.aiwait == "1" and (T("  房间开着：", "  ROOM: ") .. clipText(lb.aiwaitaddr, 22)) or ""), COL_GREEN
@@ -1621,11 +1622,14 @@ local function netuiStatus(lb, tn)
     -- 房里有别人就按多人房显示
     local mpn = tonumber(lb.mpn) or 0
     if lb.mp == "1" and mpn >= 2 then
-        local ha = ((lb.mphostaddr or "") ~= "") and (T("  房主地址 ", "  HOST ") .. clipText(lb.mphostaddr, 28)) or ""
+        -- 服务器大厅开的房有房间号（lobby.txt room=）就显示房间号（发给朋友用），没有才显示房主地址
+        local ha = ((lb.room or "") ~= "") and (T("  房间号 ", "  ROOM ") .. lb.room)
+                   or ((lb.mphostaddr or "") ~= "") and (T("  房主地址 ", "  HOST ") .. clipText(lb.mphostaddr, 28)) or ""
         return string.format(T("房间 %d 人", "ROOM: %d"), mpn) .. ha, COL_GREEN
     end
     if role == "host" then
-        local ha = (lb.mp == "1" and (lb.mphostaddr or "") ~= "") and (T("房主地址 ", "HOST ") .. clipText(lb.mphostaddr, 28)) or clipText(lb.myaddr, 22)
+        local ha = (lb.mp == "1" and (lb.room or "") ~= "") and (T("房间号 ", "ROOM ") .. lb.room)
+                   or (lb.mp == "1" and (lb.mphostaddr or "") ~= "") and (T("房主地址 ", "HOST ") .. clipText(lb.mphostaddr, 28)) or clipText(lb.myaddr, 22)
         return T("主机：等对方加入  ", "HOSTING: WAITING  ") .. ha, COL_ORANGE
     end
     if route then return T("正在连接（", "CONNECTING (") .. route .. T("）", ")"), COL_ORANGE end

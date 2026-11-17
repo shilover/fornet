@@ -50,6 +50,7 @@ namespace ForNet
         public string LanAddr = "";      // M4：对方自己报的局域网端点（同一局域网里房主给的是公网端点时可以先试这个）
         public bool PreferLan;           // 直连一直不通时 4–12 秒改试局域网端点
         public string Nick = "";
+        public string Uid = "";          // 状态包里的 uid=（拉黑 / 举报 / "最近对手"用；对方自报，同 1v1）
         public string Token = "";        // 房主介绍时给这一对的一次性口令
         public bool DirectVerified;      // 收到对方带正确口令的 4NMPHELLO
         public volatile bool MdzOk;      // 对方会拼全互连省流包（它的状态包 / 握手 / 探测里带 mdz=1）
@@ -508,6 +509,15 @@ namespace ForNet
         }
 
         public List<int> Pids() { lock (sync) return new List<int>(peers.Keys); }
+        // 房里真人的 [编号, uid, 昵称]（有 uid 的才给）
+        public List<string[]> MemberIds()
+        {
+            var r = new List<string[]>();
+            lock (sync)
+                foreach (var p in peers.Values)
+                    if (!p.IsAi && !string.IsNullOrEmpty(p.Uid)) r.Add(new[] { p.Pid.ToString(), p.Uid, p.Nick ?? "" });
+            return r;
+        }
         public int Count { get { lock (sync) return peers.Count; } }
         public void Remove(int pid)
         {
@@ -983,6 +993,9 @@ namespace ForNet
             {
                 tagged = DzDecode(pid, tagged);
                 if (tagged == null) return;
+                // 房里每位玩家的标识（同 1v1 的 PeerUid）：Program 据此把房里的人列进"最近对手"，能拉黑 / 举报
+                var uid = Ident.Field("\n" + tagged, "uid");
+                if (!string.IsNullOrEmpty(uid)) lock (sync) { MpPeerState pu; if (peers.TryGetValue(pid, out pu) && pu.Uid != uid) pu.Uid = uid; }
             }
             else
             {
