@@ -763,9 +763,9 @@ namespace ForNet
             if (!Enabled || MyPid <= 0 || string.IsNullOrEmpty(body)) return;
             // 对决观众不发状态包（DuelBroadcastState 里也挡着）：别先编码，不然 mpdz= 把没发出去的包算成"实发完整包"
             //（多人会话 11-15 复测：观众 mpdz=0:3680874/3680874，看着像观众一直在发完整包）
-            // 11-17：只在点了选手（叫号 → 交手 → 本场结束）时这样挡。空闲（fa = fb = 0）时照常发给每个人，
-            // 以前空闲时谁都不是选手、谁都不发，进房后房里的人一个都看不到
-            bool duelPair = DuelOn && (DuelFa > 0 || DuelFb > 0);
+            // 只在一场开打后（live：倒计时 / 交手 / 回合之间）这样挡。待机、叫好选手等两人准备、一场结束时照常发给每个人，
+            // 进房的人互相看得见（以前空闲时谁都不是选手、谁都不发，房里的人一个都看不到）
+            bool duelPair = DuelOn && DuelLive && (DuelFa > 0 || DuelFb > 0);
             if (duelPair && MyPid != DuelFa && MyPid != DuelFb) return;
             string tagged = StripSrc(DzEncode(StripSrc(body))) + "src=" + MyPid + "\n";
             bool crit = Critical(body);
