@@ -763,10 +763,13 @@ namespace ForNet
             if (!Enabled || MyPid <= 0 || string.IsNullOrEmpty(body)) return;
             // 对决观众不发状态包（DuelBroadcastState 里也挡着）：别先编码，不然 mpdz= 把没发出去的包算成"实发完整包"
             //（多人会话 11-15 复测：观众 mpdz=0:3680874/3680874，看着像观众一直在发完整包）
-            if (DuelOn && MyPid != DuelFa && MyPid != DuelFb) return;
+            // 11-17：只在点了选手（叫号 → 交手 → 本场结束）时这样挡。空闲（fa = fb = 0）时照常发给每个人，
+            // 以前空闲时谁都不是选手、谁都不发，进房后房里的人一个都看不到
+            bool duelPair = DuelOn && (DuelFa > 0 || DuelFb > 0);
+            if (duelPair && MyPid != DuelFa && MyPid != DuelFb) return;
             string tagged = StripSrc(DzEncode(StripSrc(body))) + "src=" + MyPid + "\n";
             bool crit = Critical(body);
-            if (DuelOn) { DuelBroadcastState(tagged, crit); return; }       // 新版 1v1：只发对手 + 转发机；观众不发
+            if (duelPair) { DuelBroadcastState(tagged, crit); return; }       // 新版 1v1：只发对手 + 转发机；观众不发
             List<MpPeerState> list;
             lock (sync) list = new List<MpPeerState>(peers.Values);
             for (int i = 0; i < list.Count; i++) { if (list[i].IsAi) continue; list[i].StateTx++; SendState(list[i], tagged, crit); }
