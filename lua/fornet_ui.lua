@@ -1013,7 +1013,7 @@ function BFRIENDS.items(lb, items, page)
             items[#items + 1] = { label = T("开房（好友可见）", "HOST A ROOM (VISIBLE TO FRIENDS)"),
                                   act = function() consent().ask("bridge_match", function() netuiCmd("host", "bridge=1\n") end) end }
             local mpn = (BASEHOOK and BASEHOOK.mp and BASEHOOK.mp.cfg and BASEHOOK.mp.cfg.size) or 4
-            items[#items + 1] = { label = string.format(T("开多人房（好友可见，最多 %d 人，测试中）", "HOST MULTIPLAYER (VISIBLE TO FRIENDS, UP TO %d, TEST)"), mpn),
+            items[#items + 1] = { label = string.format(T("开房（好友可见，最多 %d 人）", "HOST A ROOM (VISIBLE TO FRIENDS, UP TO %d)"), mpn),
                                   act = function() consent().ask("bridge_match", function() netuiCmd("mphost", "bridge=1\nn=" .. mpn .. "\n") end) end }
         end
     end
@@ -1622,7 +1622,7 @@ local function netuiStatus(lb, tn)
     local mpn = tonumber(lb.mpn) or 0
     if lb.mp == "1" and mpn >= 2 then
         local ha = ((lb.mphostaddr or "") ~= "") and (T("  房主地址 ", "  HOST ") .. clipText(lb.mphostaddr, 28)) or ""
-        return string.format(T("多人房间 %d 人", "MULTIPLAYER ROOM: %d"), mpn) .. ha, COL_GREEN
+        return string.format(T("房间 %d 人", "ROOM: %d"), mpn) .. ha, COL_GREEN
     end
     if role == "host" then
         local ha = (lb.mp == "1" and (lb.mphostaddr or "") ~= "") and (T("房主地址 ", "HOST ") .. clipText(lb.mphostaddr, 28)) or clipText(lb.myaddr, 22)
