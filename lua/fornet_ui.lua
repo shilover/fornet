@@ -25,7 +25,9 @@ NETUI.BUSY = {
     spectate = { "正在进入观战", "JOINING AS SPECTATOR" }, rotate = { "正在换人", "ROTATING" }, tospec = { "正在下场", "STEPPING DOWN" },
     hostdown = { "正在下场", "STEPPING DOWN" }, hostup = { "正在回来", "COMING BACK" },
 }
-for _, c in ipairs({ "name", "port", "upnp", "relay", "server", "secret", "lang", "ailevel", "aiload", "airoom", "airoommode" }) do
+-- 11-18 用户："调 AI 难度每次等好久、有时失败"：ailevel / aiload 只是写设置，联机程序立即生效，
+-- 不走"正在保存 + 等 ack 5 秒"那一套（等不到就报失败）；去掉这两个的忙状态
+for _, c in ipairs({ "name", "port", "upnp", "relay", "server", "secret", "lang", "airoom", "airoommode" }) do
     NETUI.BUSY[c] = { "正在保存", "SAVING" }
 end
 local LOBBY_FILE, CMD_FILE = NET_DIR .. "/lobby.txt", NET_DIR .. "/cmd.txt"
