@@ -161,38 +161,76 @@ end
 -- 先试 fornet_lobby.dll：联机程序编成原生 DLL、在游戏进程里跑（不再多一个后台进程）。package.loadlib 拿它导出的
 -- fornet_lobby_start 调一次：它只起一个后台线程（已经在跑就什么也不做），不碰 lua_State。没有这个 DLL / 载不进来 /
 -- 连着 2 次拉起后还没响应，退回启动 <退路 exe>（两者用同一个 net 目录的单实例锁，不会同时跑两份）
+-- §390：联机程序没起来时，面板要写真正的原因。以前一律落到"退路 exe 不存在"（no PBZLobby.exe），
+-- 可 0.34 起发布包根本不带那个 exe，最常见的原因（DLL 被 Windows 应用控制策略 / 杀软拦了）被彻底盖住，
+-- 玩家和作者都看不出问题。这里把每一步的真实原因记进 NETUI.launchErr / launchWhy。
+-- 系统给的是本机 ANSI（中文系统 = GBK）字节，画到屏幕上会乱码：认出来的给人话，认不出的只在日志里留原文。
+local function isAppControl(s)
+    if s:find("应用程序控制", 1, true) or s:find("Application Control", 1, true) or s:find("0x800711C7", 1, true) then return true end
+    return s:find("\xD3\xA6\xD3\xC3\xB3\xCC\xD0\xF2\xBF\xD8\xD6\xC6", 1, true) ~= nil     -- GBK：应用程序控制
+end
+-- Windows 的 FormatMessage 结尾带 \r\n：以前会把这行日志和面板撑成两行
+local function oneLine(s)
+    return (tostring(s or ""):gsub("[\r\n]+$", ""):gsub("[\r\n]", " "))
+end
+local function setLaunchErr(why, raw)
+    NETUI.launchWhy = why
+    if why == "appcontrol" then NETUI.launchErr = T("被系统的应用控制策略拦住", "BLOCKED BY WINDOWS APP CONTROL")
+    elseif why == "missing" then NETUI.launchErr = T("缺少 fornet_lobby.dll", "FORNET_LOBBY.DLL IS MISSING")
+    elseif why == "noloadlib" then NETUI.launchErr = T("这个 UE4SS 载入不了 DLL", "THIS UE4SS CANNOT LOAD DLLS")
+    elseif why == "silent" then NETUI.launchErr = T("拉起 2 次都没响应", "STARTED TWICE, NO REPLY")
+    elseif raw and raw ~= "" and not raw:find("[\128-\255]") then NETUI.launchErr = raw     -- 英文系统给的 ASCII 原文：直接显示
+    else NETUI.launchErr = T("载入 DLL 失败（详情看日志）", "DLL LOAD FAILED (SEE THE LOG)") end     -- 非 UTF-8：别画到屏幕上
+end
+
 local function netuiLaunchDll()
-    if NETUI.dllOff then return false end     -- 第二份也用 DLL（DLL 自己判断用 net2）
+    if NETUI.dllOff then     -- 第二份也用 DLL（DLL 自己判断用 net2）；也让外面再拉时原因照旧（别退回"没有 PBZLobby.exe"）
+        setLaunchErr(NETUI.dllOff, NETUI.dllRaw)
+        return false
+    end
     local dll = (ROOT .. "/fornet_lobby.dll"):gsub("/", "\\")
     local f = io.open(dll, "rb")
-    if not f then NETUI.dllOff = true; return false end
+    if not f then
+        NETUI.dllOff = "missing"
+        setLaunchErr("missing")
+        out("联机面板：模组目录里没有 fornet_lobby.dll（%s），改用 %s", dll, LOBBY_EXE)
+        return false
+    end
     f:close()
     if type(package) ~= "table" or type(package.loadlib) ~= "function" then
-        NETUI.dllOff = true
+        NETUI.dllOff = "noloadlib"
+        setLaunchErr("noloadlib")
         out("!! 联机面板：这个 UE4SS 的 Lua 没有 package.loadlib，改用 %s", LOBBY_EXE)
         return false
     end
     NETUI.dllTries = (NETUI.dllTries or 0) + 1
     if NETUI.dllTries > 2 then
-        NETUI.dllOff = true
+        NETUI.dllOff = "silent"
+        setLaunchErr("silent")
         out("!! 联机面板：fornet_lobby.dll 拉起 2 次都没响应，改用 %s（原因看 net/lobby_errors.log）", LOBBY_EXE)
         return false
     end
     local fn, err = package.loadlib(dll, "fornet_lobby_start")
     if type(fn) ~= "function" then
-        NETUI.dllOff = true
-        out("!! 联机面板：载入 %s 失败 %s，改用 %s", dll, tostring(err), LOBBY_EXE)
+        local e = oneLine(err)
+        NETUI.dllOff, NETUI.dllRaw = isAppControl(e) and "appcontrol" or "raw", e
+        setLaunchErr(NETUI.dllOff, e)
+        out("!! 联机面板：载入 %s 失败 %s，改用 %s", dll, e, LOBBY_EXE)
         return false
     end
     local ok, e = pcall(fn)
     out("联机面板：启动联机程序（游戏进程内）%s -> %s %s", dll, ok and "已执行" or "失败", tostring(e or ""))
-    if not ok then NETUI.dllOff = true; return false end
+    if not ok then
+        NETUI.dllOff, NETUI.dllRaw = "raw", oneLine(e)
+        setLaunchErr("raw", NETUI.dllRaw)
+        return false
+    end
     return true
 end
 
 local function netuiLaunch()
     NETUI.launchAt = os.time()
-    NETUI.launchErr = nil
+    NETUI.launchErr, NETUI.launchWhy = nil, nil
     if netuiLaunchDll() then return end
     if type(os) ~= "table" or type(os.execute) ~= "function" then
         NETUI.launchErr = "no os.execute"
@@ -203,15 +241,16 @@ local function netuiLaunch()
     -- 发布包 / deploy 早就不带 <退路 exe> 了；文件不在时 "cmd /c start" 会弹"找不到文件"框，os.execute 一直等 → 游戏线程卡死
     local fe = io.open(dir .. "\\" .. LOBBY_EXE, "rb")
     if not fe then
-        NETUI.launchErr = "no " .. LOBBY_EXE
-        out("联机面板：没有 %s，不再退回启动它（原因看 net/lobby_errors.log；重启游戏会重新载入 fornet_lobby.dll）", LOBBY_EXE)
+        -- 退路 exe（PBZLobby.exe）发布包早就不带了：它不在不是失败原因，真正的原因 netuiLaunchDll 已经记下
+        if not NETUI.launchErr then setLaunchErr("raw", "no " .. LOBBY_EXE) end
+        out("联机面板：没有 %s，不再退回启动它（真正原因：%s；重启游戏会重新载入 fornet_lobby.dll）", LOBBY_EXE, tostring(NETUI.launchErr))
         return
     end
     fe:close()
     local cmd = string.format('cmd /c start "" "%s\\%s" --bg', dir, LOBBY_EXE)
     if INST.slot == 2 then cmd = cmd .. string.format(' --dir "%s"', NET_DIR:gsub("/", "\\")) end
     local ok, r = pcall(os.execute, cmd)
-    NETUI.launchErr = (not ok) and tostring(r) or nil
+    NETUI.launchErr, NETUI.launchWhy = (not ok) and oneLine(r) or nil, (not ok) and "exe" or nil
     out("联机面板：启动联机窗口 %s -> %s %s", cmd, ok and "已执行" or "失败", tostring(r))
 end
 
@@ -1553,13 +1592,23 @@ local function netuiItems(lb, tn)
     if not lobbyAlive(lb) then
         if not netuiStarting() then
             items[#items + 1] = { label = T("重新启动联机程序", "RESTART THE ONLINE HELPER"),
-                                  act = function() NETUI.tries = 0; netuiLaunch() end }
-            -- 起发布包没有 <退路 exe>（联机程序是游戏里的 fornet_lobby.dll）：只有 exe 真在时才叫人手动打开它
+                                  act = function()     -- §390：手动重试要真的再试一次 DLL（以前 dllOff 一旦置上，按多少次都只往死路上撞）
+                                      NETUI.tries, NETUI.dllTries, NETUI.dllOff = 0, 0, nil
+                                      netuiLaunch() end }
+            -- 说明行：讲真正该怎么办。发布包没有 <退路 exe>（联机程序是游戏里的 fornet_lobby.dll），
+            -- 只有 exe 真在时才叫人手动打开它
             local exe = io.open((ROOT .. "/" .. LOBBY_EXE):gsub("/", "\\"), "rb")
             if exe then exe:close() end
             local md = "Mods\\" .. (tostring(ROOT):match("([^/\\]+)[/\\]*$") or "?")     -- F5：模组目录名不写死
-            items[#items + 1] = { label = exe and T("（还不行：手动打开 " .. md .. "\\" .. LOBBY_EXE .. "）", "(STILL NOT: OPEN " .. md .. "\\" .. LOBBY_EXE .. ")")
-                                              or T("（还不行：重启游戏；原因在 " .. md .. "\\net\\lobby_errors.log）", "(STILL NOT: RESTART THE GAME; SEE " .. md .. "\\net\\lobby_errors.log)") }
+            local why = NETUI.launchWhy
+            local hint
+            if exe then hint = T("（还不行：手动打开 " .. md .. "\\" .. LOBBY_EXE .. "）", "(STILL NOT: OPEN " .. md .. "\\" .. LOBBY_EXE .. ")")
+            elseif why == "appcontrol" then hint = T("（Windows 拦的：关掉“智能应用控制”后重启游戏）", "(BLOCKED BY WINDOWS: TURN OFF SMART APP CONTROL, THEN RESTART)")
+            elseif why == "missing" then hint = T("（从压缩包重新解压 fornet_lobby.dll，杀软里放行）", "(RE-EXTRACT fornet_lobby.dll AND ALLOW IT IN YOUR ANTIVIRUS)")
+            elseif why == "noloadlib" then hint = T("（换影之刃零专用版 UE4SS）", "(USE THE PHANTOM BLADE ZERO UE4SS BUILD)")
+            elseif why == "silent" then hint = T("（原因看 " .. md .. "\\net\\lobby_errors.log；重启游戏再试）", "(SEE " .. md .. "\\net\\lobby_errors.log; RESTART AND RETRY)")
+            else hint = T("（重启游戏；详情看 logs\\<日期>\\mp_probe.log）", "(RESTART THE GAME; DETAILS IN logs\\<date>\\mp_probe.log)") end
+            items[#items + 1] = { label = hint, col = (why == "appcontrol") and COL_RED or nil }
         end
         return items
     end
@@ -1588,7 +1637,7 @@ local function netuiStatus(lb, tn)
             return T("正在启动联机程序…", "STARTING THE ONLINE HELPER..."), COL_ORANGE
         end
         if NETUI.launchErr then
-            return T("联机程序启动失败：", "HELPER FAILED: ") .. clipText(NETUI.launchErr, 20), COL_RED
+            return T("联机程序启动失败：", "HELPER FAILED: ") .. clipText(NETUI.launchErr, 24), COL_RED
         end
         return T("联机程序没响应", "THE ONLINE HELPER IS NOT RESPONDING"), COL_RED
     end
