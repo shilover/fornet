@@ -767,7 +767,7 @@ local function guiButton(size, halign)
         s:SetHorizontalAlignment(halign)
         s:SetVerticalAlignment(2)
     end)
-    return { b = b, tb = tb }
+    return { b = b, tb = tb, s = s }
 end
 
 -- 下面三个只在值变了时才调引擎
