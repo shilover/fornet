@@ -1625,9 +1625,9 @@ local function netuiItems(lb, tn)
     end
     local mode = netuiMode(lb, tn)
     local function page(p) return function() NETUI.page = p; NETUI.sel = 1 end end
-    -- 每页底下：房间设置… 在 系统设置… 上面
+    -- 每页底下：通用对局规则…（原"房间设置…"，11-18 用户改名）在 系统设置… 上面
     local function settingsBtns()
-        items[#items + 1] = { label = T("房间设置…", "ROOM RULES..."), act = page("room") }
+        items[#items + 1] = { label = T("通用对局规则…", "GENERAL MATCH RULES..."), act = page("room") }
         items[#items + 1] = { label = T("系统设置…", "SYSTEM SETTINGS..."), act = page("settings") }
     end
     for _, h in ipairs(U.pollHooks) do pcall(h, lb) end     -- 原来只在没被前面的页截走时跑（X1 ST.ext.poll）；现在每次都跑
