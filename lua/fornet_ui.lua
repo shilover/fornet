@@ -321,6 +321,17 @@ local COL_GRAY, COL_LABEL, COL_ORANGE, COL_RED, COL_WHITE = ctx.COL_GRAY, ctx.CO
 local valid = ctx.valid or function(o) return o ~= nil end
 local getP1PC = ctx.getP1PC or function() return nil end
 
+-- 11-18 用户：面板里"结束 XX / 退出 XX"这类按钮的文字改成红色，一眼看出会中断当前玩法。
+-- 只认能点的按钮（act，忙碌时 act 被摘掉、留 off）；说明行 / 菜单入口（"…"）不动；item.col 写了的按写的。
+local END_BTN = { "^结束", "^退出", "^断开", "^离开", "^解散", "^中止", "^取消.*对局",
+                  "^END ", "^DISCONNECT", "^LEAVE ", "^QUIT", "^EXIT" }
+local function itemCol(it)
+    if it.col or not (it.act or it.off) then return it.col end
+    local s = it.label or ""
+    for i = 1, #END_BTN do if s:find(END_BTN[i]) then return COL_RED end end
+    return nil
+end
+
 -- ---- v0.18.6 游戏内输入框（原 main.lua 段；说明见那里的标题行）
 -- UMG 的 EditableTextBox 放在屏幕文字的界面里；输入时 SetInputMode_UIOnlyEx，键盘只给输入框（游戏收不到，角色不动、Esc 不开菜单）。
 -- 18:28 实机原型：打字 / Ctrl+V 正常；按回车后输入框丢焦点、而且读出来的字已经被清空 → 打字时每帧把内容记在 e.text，
@@ -1779,7 +1790,7 @@ local function netuiRows(tn)
     for i = first, last do
         local it = items[i]
         local sel = i == NETUI.sel and it.act
-        rows[#rows + 1] = { c = sel and ("> " .. it.label .. " <") or it.label, col = sel and COL_WHITE or it.col or COL_GRAY, size = 0.7 }
+        rows[#rows + 1] = { c = sel and ("> " .. it.label .. " <") or it.label, col = sel and COL_WHITE or itemCol(it) or COL_GRAY, size = 0.7 }
     end
     if last < #items then
         rows[#rows + 1] = { c = T("（下面还有 " .. (#items - last) .. " 项）", "(" .. (#items - last) .. " MORE BELOW)"), col = COL_GRAY, size = 0.55 }
@@ -1833,6 +1844,7 @@ end
 
 -- 导出（main.lua 取别名；名字和搬之前一样）
 U.netuiStatus, U.netuiRows, U.netuiItems = netuiStatus, netuiRows, netuiItems     -- F3b-5
+U.netuiItemCol = itemCol     -- 11-18 结束 / 退出类按钮的红字（main.lua 的鼠标面板取）
 U.upnpFit, U.upnpClip = upnpFit, upnpClip     -- F3b-4
 U.CONSENT, U.EXTCTX, U.OPP = CONSENT, EXTCTX, OPP     -- F3b-4
 U.RECENT = RECENT     -- F3b-3
