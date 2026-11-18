@@ -3242,6 +3242,21 @@ namespace ForNet
             lock (sync) mine = joinHandles.Contains(h);
             if (st == Bridge.StConnecting && !mine && IsHost && remoteSid != 0UL)
             {
+                // 自动换线（BridgeUp 测速）和"经桥接入房"共用这一个虚拟端口 / 这一个回调。
+                // 这位对端刚发过 BUASK，正在等它的测速连接：这条就是测速那条，必须先让给桥接测速，
+                // 否则会被下面当成"经桥接入房"吃掉（测速包全进 JoinBridgeRx），15 秒测不到就放弃、整局不再换线。
+                bool buWants = false;
+                lock (sync)
+                {
+                    foreach (var bp in peers.Values)
+                        if (bp.Pid > MyPid && bp.BridgeId == remoteSid && bp.BuHandle == 0 && !bp.BuAbandoned
+                            && bp.BuPhase >= BuAsked && bp.BuPhase <= BuMeasuring) { buWants = true; break; }
+                }
+                if (buWants)
+                {
+                    Log(L.T("多人桥接：", "Mesh bridge: ") + remoteSid + L.T(" 的测速连接（刚发过 BUASK），不按入房处理", " speed-test connection (BUASK just came in), not a bridge join"));
+                    return false;
+                }
                 bool ok;
                 lock (sync)
                 {
@@ -3383,7 +3398,12 @@ namespace ForNet
                     }
                 }
                 if (match != null) Bridge.Accept(h);
-                else { try { Bridge.Close(h, false); } catch (Exception) { } }
+                else
+                {
+                    Log(L.T("多人桥接：收到一条桥接连接（对端 ", "Mesh bridge: incoming connection (peer ") + remoteSid
+                            + L.T("）但没有对应 / 正在测速的对端 → 关掉", ") with no matching speed-test peer -> closed"));
+                    try { Bridge.Close(h, false); } catch (Exception) { }
+                }
                 return;
             }
             if (st == Bridge.StConnected)
