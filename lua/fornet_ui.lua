@@ -872,6 +872,7 @@ local function guiBuild()
         add(GUI.navBox.b, 12)
         GUI.prev, GUI.next, GUI.back = guiButton(20, 2), guiButton(20, 2), guiButton(20, 2)
         GUI.filter = guiButton(20, 2)
+        GUI.enterMode = guiButton(20, 2)     -- 11-18 房间列表：进入方式（上场 / 只观战），小按钮放翻页栏
         GUI.pageNo = { tb = guiText(20, COL_WHITE) }
         GUI.navBox.b:AddChildToHorizontalBox(GUI.prev.b)
         local ps = GUI.navBox.b:AddChildToHorizontalBox(GUI.pageNo.tb)
@@ -880,6 +881,8 @@ local function guiBuild()
         GUI.navBox.b:AddChildToHorizontalBox(GUI.next.b)
         local gap = guiNew("Spacer")
         GUI.navBox.b:AddChildToHorizontalBox(gap):SetSize({ SizeRule = 1, Value = 1.0 })   -- 把"返回"推到最右
+        local es = GUI.navBox.b:AddChildToHorizontalBox(GUI.enterMode.b)
+        es:SetPadding({ Left = 0, Top = 0, Right = 12, Bottom = 0 })
         local fs = GUI.navBox.b:AddChildToHorizontalBox(GUI.filter.b)
         fs:SetPadding({ Left = 0, Top = 0, Right = 12, Bottom = 0 })
         GUI.navBox.b:AddChildToHorizontalBox(GUI.back.b)
