@@ -617,6 +617,7 @@ local function joinItem(t, inList)
                  act = function() netuiFlash(T("对方还没开房", "THEY ARE NOT HOSTING YET"), COL_ORANGE) end }
     end
     local isMp = t.tg and (t.tg.k == "mp" or (tonumber(t.tg.max) or 0) >= 2)
+    local watchRoom = NETUI.roomWatch and inList     -- 11-18 观战选房页：点房间 = 观战
     if t.kind == "sroom" then     -- 0.34 对局走桥接平台的房：自己没开"对局走桥接平台"就先确认（steam_match），join 带桥接平台=1 让联机程序顺手开
         return { label = inList and clipText(t.label, ROOM_CLIP) or (T("加入 ", "JOIN ") .. clipText(t.label, 30)), target = t.target,
                  act = function()
@@ -624,17 +625,17 @@ local function joinItem(t, inList)
                          local svc = NETUI.bridgeSvc()
                          netuiFlash(T("这间房的对局走" .. svc .. "，要装了桥接扩展包并在它的插件页启用才能进", "THIS ROOM PLAYS OVER " .. svc:upper() .. "; NEEDS THE " .. svc:upper() .. " EXTENSION"), COL_ORANGE); return
                      end
-                     local cmdName = isMp and "mpjoin" or "join"
+                     local cmdName = watchRoom and "spectate" or (isMp and "mpjoin" or "join")
                      -- 主机设成一直桥接的房：客机不看自己的设置，只要同意过桥接（没同意就先问）
                      consent().ask("bridge_match", function() netuiCmd(cmdName, "target=" .. t.target .. "\nbridge=1\n") end)
                  end }
     end
     if isMp then
         return { label = inList and clipText(t.label, ROOM_CLIP) or (T("加入 ", "JOIN ") .. clipText(t.label, 30)), target = t.target,
-                 act = function() netuiCmd("mpjoin", "target=" .. t.target .. "\n") end }
+                 act = function() netuiCmd(watchRoom and "spectate" or "mpjoin", "target=" .. t.target .. "\n") end }
     end
     return { label = inList and clipText(t.label, ROOM_CLIP) or (T("加入 ", "JOIN ") .. clipText(t.label, 30)), target = t.target,
-             act = function() netuiCmd("join", "target=" .. t.target .. "\n") end }
+             act = function() netuiCmd(watchRoom and "spectate" or "join", "target=" .. t.target .. "\n") end }
 end
 
 local function noRoomsText(mode)
