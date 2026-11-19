@@ -393,7 +393,7 @@ return function(ctx)
         if #EXT.list == 0 then
             items[#items + 1] = { label = T("没有扩展包（把扩展放到 " .. MODDIR .. "\\ext\\<名字>\\ 下，重启游戏）", "NO EXTENSIONS (put them in " .. MODDIR .. "\\ext\\<name>\\, restart)"), col = COL.label }
         else
-            items[#items + 1] = { label = T("扩展包默认停用。在插件页里启用 / 停用，都要重启游戏才生效。", "EXTENSIONS ARE OFF BY DEFAULT. ENABLING OR DISABLING ONE TAKES EFFECT AFTER A GAME RESTART."), col = COL.orange }
+            items[#items + 1] = { label = T("扩展包默认停用；启用 / 停用后要重启游戏。", "EXTENSIONS ARE OFF BY DEFAULT. ENABLING OR DISABLING ONE TAKES EFFECT AFTER A GAME RESTART."), col = COL.orange }
         end
         for _, p in ipairs(EXT.list) do
             local st = stateLabel(p)
@@ -408,7 +408,7 @@ return function(ctx)
         end
         -- 11-13 用户没看懂原来那句（"由各自作者负责；对外发包都要先经你同意（见隐私说明）"），且基底隐私说明里已没有扩展包的内容
         items[#items + 1] = { label = T("扩展包不是这个模组自带的功能，由它的作者负责。", "Extensions are not part of this mod; their authors are responsible for them."), col = COL.label }
-        items[#items + 1] = { label = T("在插件页启用 = 同意它列出的条款（点开能看全文），重启游戏生效；停用会一起撤回。", "Enabling a plugin on its page = agreeing to the terms it lists (open them to read); restart to apply. Disabling withdraws them."), col = COL.label }
+        items[#items + 1] = { label = T("启用 = 同意列出的条款（点开看全文）；停用一起撤回。", "Enabling a plugin on its page = agreeing to the terms it lists (open them to read); restart to apply. Disabling withdraws them."), col = COL.label }
         items[#items + 1] = { label = T("返回", "BACK"), act = page("settings") }
         return items
     end
