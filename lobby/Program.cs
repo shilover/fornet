@@ -3061,6 +3061,9 @@ namespace ForNet
         // AI 对战时同时开着的真房间（文件在 net\wait\，真人连进来后转正成 session）；waitMode = 它的连接方式
         Session waitSes;
         string waitMode = "";
+        // 排位的等人房间：账号还没登记好 / 服务器没开排位时先不开，等就绪了 Tick 里自动再开（见 StartWait / RankWaitReady）
+        bool waitRankPending;
+        DateTime waitRankAt = DateTime.MinValue;
         readonly CheckBox aiRoomBox = new CheckBox();
         readonly ComboBox aiRoomModeBox = new ComboBox();
         readonly Discovery disc = new Discovery();
@@ -3084,19 +3087,31 @@ namespace ForNet
             get
             {
                 int sup = Rank.Support;
-                // 排位走桥接平台：没有桥接平台（发布版 / 游戏里的桥不在）就不列。已经选着它的照样列（游戏刚开时桥可能还没好，
-                // 别因此把玩家的选择改掉存盘），建房 / 加入时再提示桥接平台没连上
+                // 排位（武林盟主）列不列只看两件事：玩家装没装这个玩法（Modes.All 里有没有 ranked，没装 / 没启用就不在）
+                // 和当前大厅服务器开没开这个玩法（Rank.Support）。桥接扩展包装没装只影响 bridge 方式，跟排位无关。
+                // 已经选着 ranked 的照样列（刚开游戏、服务器支持还没问到时别把玩家的选择改掉存盘），建房 / 加入时再提示
                 // 安全模式（本地）：只剩局域网 / 本地 AI（下线标志 X3 删了）
                 bool ai = LocalAiSupport.Has;     // 11-13 拆干净：本地 AI 由游戏适配编进来；没有就不列这种方式（面板跟着 modes= 藏标签）
                 if (cfg.Safe) return Array.FindAll(Modes.All, x => x == "lan" || (x == "ai" && ai));
                 var all = Array.FindAll(Modes.All, x => x != "bridge" && (x != "ai" || ai));     // 0.34 评审：面板没有桥接平台标签了（好友在"最近"页），lobby.txt modes= 也不列，免得 End 键切进去
-                // 0.34：排位默认直连（作废），不再要求桥接平台
+                // 0.34：排位默认直连，不要求桥接平台（没装桥接扩展包也照样能进排位）
                 if (sup == 1 || (sup == -1 && Mode == "ranked")) return all;
                 return Array.FindAll(all, x => x != "ranked");
             }
         }
         int shownSupport = -2;     // 上次按哪个 Support / 桥接平台有没有填的下拉框（变了重填）
         int ShownKey { get { return Rank.Support * 2 + (cfg.Safe ? 16 : 0); } }
+        // "同时开房等真人"能选的方式：联机程序有的（Modes.Rooms，已去掉 ai / 没装的排位）里，只列面板现在列出来的
+        // （排位要这台大厅服务器开了 --ranked 才列）。正选着的那个即使现在列不出来也留着（排位还在探测），开房时再提示
+        string[] AiRoomModes
+        {
+            get
+            {
+                var shown = ShownModes;
+                var list = Array.FindAll(Modes.Rooms, m => Array.IndexOf(shown, m) >= 0 || m == cfg.AiRoomMode);
+                return list.Length > 0 ? list : Modes.Rooms;
+            }
+        }
         readonly TextBox nameBox = new TextBox(), ipBox = new TextBox(), portBox = new TextBox(), srvBox = new TextBox(), secretBox = new TextBox();
         readonly ListBox roomList = new ListBox();
         readonly Label status = new Label(), logLabel = new Label(), roleBig = new Label(), roleSub = new Label();
@@ -3190,7 +3205,9 @@ namespace ForNet
             aiRoomModeBox.SetBounds(360, y + 3, 226, 24); Add(aiRoomModeBox);
             aiRoomModeBox.SelectedIndexChanged += delegate
             {
-                if (!loadingMode && aiRoomModeBox.SelectedIndex >= 0) SetAiRoomMode(Modes.Rooms[aiRoomModeBox.SelectedIndex]);
+                var ms = AiRoomModes;
+                if (!loadingMode && aiRoomModeBox.SelectedIndex >= 0 && aiRoomModeBox.SelectedIndex < ms.Length)
+                    SetAiRoomMode(ms[aiRoomModeBox.SelectedIndex]);
             };
             y += 44;
             lblJoin.SetBounds(14, y + 3, 130, 20); Add(lblJoin);
@@ -3294,8 +3311,9 @@ namespace ForNet
             aiRoomBox.Text = L.T("同时开房等真人", "Also host a room");
             aiRoomBox.Checked = cfg.AiRoom;
             aiRoomModeBox.Items.Clear();
-            foreach (var m in Modes.Rooms) aiRoomModeBox.Items.Add(L.T("开房：", "Room: ") + Modes.Name(m));
-            aiRoomModeBox.SelectedIndex = Array.IndexOf(Modes.Rooms, cfg.AiRoomMode);
+            var arm = AiRoomModes;
+            foreach (var m in arm) aiRoomModeBox.Items.Add(L.T("开房：", "Room: ") + Modes.Name(m));
+            aiRoomModeBox.SelectedIndex = Array.IndexOf(arm, cfg.AiRoomMode);
             loadingMode = false;
             lblIp.Text = L.T("你的地址（发给朋友）", "Your address (send it)");
             hostBtn.Text = Mode == "ai" ? L.T("开始 AI 对战", "Start AI battle") : L.T("创建房间（当主机）", "Create room (host)");
@@ -3719,29 +3737,72 @@ namespace ForNet
 
         bool AiRunning { get { return session != null && session.Mode == "ai"; } }
 
-        // 主机连接（等人的房间用）：和 StartSession 里当主机的那一支一样，只是文件放在 d
+        // 主机连接（等人的房间用）：和 StartSession 里当主机的那一支一样，只是文件放在 d。
+        // 房间设置"对局走桥接"三档对等人的房间也生效（客机一律按主机的）：
+        //   2 = 一直桥接（大厅只登记 / 介绍，对局数据全走桥接；桥接扩展包没装 / 没同意时退回直连）
+        //   1 = 直连优先，直连不通再走桥接（默认；没装桥接扩展包就只有直连）
+        //   0 = 只直连
+        // mode = ranked 时和 StartSession 的排位主机一样：在服务器大厅登记成排位房间（REG 第 9/10 段 = 1 / pid），
+        // 等人房间转正后这间房就是排位对局，照常上报计分
         Session NewHost(string mode, string d)
         {
             ITransport t = null;
             ServerLink sl = null;
+            IRoomLink rl = null;
+            bool bridgeUsable = Modes.ShowBridge && Bridge.Available, bridgeAgreed = Consent.All || Consent.Has("bridge_match");
             if (Modes.IsBridge(mode))
             {
                 if (!Bridge.Init()) throw new InvalidOperationException(Bridge.Error);
                 t = new BridgeLink(0, Path.Combine(d, "state_remote.txt"));
             }
-            else if (mode == "server")
+            else if (Modes.IsServer(mode))
             {
                 var srv = LobbyServer.Resolve(cfg.Server);
                 if (srv == null)
                     throw new InvalidOperationException(cfg.Server.Length == 0 ? L.T("先在设置里填大厅服务器地址（可自己架设）", "Set or host a lobby server first")
                                                                             : L.T("认不出大厅服务器地址：", "Can't resolve the lobby server: ") + cfg.Server);
-                t = sl = new ServerLink(srv, null, cfg.Port, cfg.Name, Path.Combine(d, "state_remote.txt"), Program.SimNoDirect);
-                sl.AllowRelay = false;     // 0.34 最终方案 3：对局不经服务器中转（以前是 cfg.Relay）
-                sl.ServerName = cfg.Server;
+                // 一直桥接：和 StartSession 同一套判断；桥接不可用 / 没同意就退回直连，不耽误开房
+                bool always = cfg.BridgeRoom && bridgeUsable && bridgeAgreed && !Program.RankUdp;
+                if (cfg.BridgeRoom && !always)
+                    NetLog.W("等人的房间设置是\"一直桥接\"，但" + (!bridgeUsable ? "桥接扩展包没装 / 没启用" : !bridgeAgreed ? "没同意桥接" : "命令行强制 UDP") + "：这间房只走直连");
+                if (always && Bridge.Init())
+                {
+                    var br = new BridgeRoomLink(srv, null, cfg.Name, Path.Combine(d, "state_remote.txt"));
+                    br.ServerName = cfg.Server;
+                    br.Ranked = mode == "ranked";
+                    br.RankPid = mode == "ranked" ? Rank.Pid : "";
+                    t = br;
+                    rl = br;
+                }
+                else
+                {
+                    if (always) NetLog.W("等人的房间：桥接用不了（" + Bridge.Error + "），这间房只走直连");
+                    sl = new ServerLink(srv, null, cfg.Port, cfg.Name, Path.Combine(d, "state_remote.txt"), Program.SimNoDirect);
+                    sl.AllowRelay = false;     // 0.34 最终方案 3：对局不经服务器中转（以前是 cfg.Relay）
+                    sl.ServerName = cfg.Server;
+                    if (mode == "ranked") sl.RankPid = Rank.Pid;     // REG 第 9 段 = 1：排位房间，等人时也挂在排位房间列表里
+                    // 默认 1 档：直连优先，直连不通时走桥接（桥在、同意过才把自己的桥接 ID 交给服务器）
+                    if (cfg.BridgeMode == 1 && bridgeUsable && bridgeAgreed && Bridge.Init() && Bridge.MyId != 0)
+                    {
+                        sl.FallbackMyId = Bridge.MyId;
+                        sl.BridgeUpOn = cfg.BridgeUp;
+                        sl.BridgeUpMs = cfg.BridgeUpMs;
+                        NetLog.W("等人的房间：直连失败时走桥接 准备好了");
+                    }
+                    t = sl;
+                }
             }
-            int port = mode == "server" ? cfg.Port : Program.LanPort;
+            int port = Modes.IsServer(mode) ? cfg.Port : Program.LanPort;
             var ses = new Session("host", mode, t, null, port, cfg.Name, d, doBackup, cfg.Secret);
-            if (sl != null) sl.MapOf = () => ses.LocalMap;
+            if (rl != null) rl.MapOf = () => ses.LocalMap;
+            else if (sl != null) sl.MapOf = () => ses.LocalMap;
+            if (mode == "ranked")     // 和 StartSession 的排位那一支一样：状态包带 rk=、本机 / 对方包的统计交给排位插件
+            {
+                ses.RankPid = Rank.Pid;
+                ses.Stats = Rank.Stats;
+                var rs = Rank.Stats;
+                if (rl != null && rs != null) rl.PeerPacket = pkt => { string r; if (pkt.TryGetValue("res", out r)) rs.Peer(r); };
+            }
             return ses;
         }
 
@@ -3754,6 +3815,20 @@ namespace ForNet
             var m = cfg.AiRoomMode;
             if (cfg.Safe) { Warn(SafeMsg()); return; }     // 0.34 评审：等人房间也受安全模式管
             if (!Consent.Has(Modes.IsBridge(m) ? "bridge_match" : m)) { Warn(L.T("开房等真人要先同意（面板会问）", "Hosting a room needs your consent first (the panel asks)")); return; }
+            // 排位（武林盟主）的等人房间：这个模式要"确实激活"才开——排位扩展包装上并启用、这台大厅服务器开了 --ranked、
+            // 本机排位账号已经在服务器登记过。还没就绪时只把开关记下来（waitRankPending），Tick 里每几秒再看一次，就绪了自动开
+            waitRankPending = false;
+            if (m == "ranked")
+            {
+                string why = RankWaitWhy();
+                if (why.Length > 0)
+                {
+                    waitRankPending = true;
+                    waitRankAt = DateTime.UtcNow.AddSeconds(RankWaitEvery);
+                    Warn(L.T("排位房间还开不了（AI 对战照常）：", "Can't open the ranked room yet (the AI battle goes on): ") + why);
+                    return;
+                }
+            }
             var wdir = Path.Combine(dir, "wait");
             try
             {
@@ -3766,12 +3841,13 @@ namespace ForNet
                 ses.AiWaiting = true;
                 var wsl = ses.T as ServerLink;
                 if (wsl != null) wsl.AiRoom = true;
+                else { var wbr = ses.T as BridgeRoomLink; if (wbr != null) wbr.AiRoom = true; }     // 一直桥接的等人房间也标"和 AI 对打中"
                 ses.Start();
                 waitSes = ses;
                 var ais = session;
                 if (ais != null) ais.SpecRelay = ses;     // AI 对打的两路包给等人房间的观战者
                 waitMode = m;
-                if (m == "server" && cfg.Upnp) Upnp.MapAsync(cfg.Port);
+                if (wsl != null && cfg.Upnp) Upnp.MapAsync(cfg.Port);     // 走桥接的房没有 UDP 端口，不用映射
                 lastLog = DateTime.Now.ToString("HH:mm:ss ") + L.T("同时开着房间等真人（", "Also hosting a room (") + Modes.Name(m)
                           + L.T("）：有人进来就结束 AI 对战", "): the AI battle ends when a player joins");
             }
@@ -3783,15 +3859,31 @@ namespace ForNet
             }
         }
 
+        const double RankWaitEvery = 5;     // 秒：排位的等人房间还没就绪时多久再看一次
+        // 排位的等人房间开不了的原因（"" = 可以开）。startWait 用；Tick 里按同一个判断决定要不要自动重开
+        string RankWaitWhy()
+        {
+            if (!RankedSupport.Available) return L.T("排位扩展包没装 / 没启用（重启游戏生效）", "the ranked extension is not installed / enabled (restart the game)");
+            if (!Consent.Has("ranked")) return L.T("还没同意排位（面板会问）", "you haven't agreed to ranked yet (the panel asks)");
+            int sup = Rank.Support;
+            if (sup == 0) return L.T("这台大厅服务器没开武林盟主（服务器要带 --ranked）", "this lobby server has no ranked mode (start it with --ranked)");
+            if (sup != 1) return L.T("正在问大厅服务器开没开排位，稍等", "still asking the lobby server whether it has ranked mode");
+            if (string.IsNullOrEmpty(Rank.Pid) || Rank.Me.Length == 0) return L.T("排位账号还没和服务器登记好，稍等", "your ranked account isn't registered with the server yet");
+            return "";
+        }
+        // 排位的等人房间现在能不能开（Tick 里自动重试用）
+        bool RankWaitReady { get { return !cfg.Safe && cfg.AiRoom && cfg.AiRoomMode == "ranked" && AiRunning && waitSes == null && RankWaitWhy().Length == 0; } }
+
         void StopWait()
         {
             var w = waitSes;
+            waitRankPending = false;
             if (w == null) return;
             waitSes = null;
             var ais = session;
             if (ais != null && ais.SpecRelay == w) ais.SpecRelay = null;
             w.Stop();
-            if (waitMode == "server") Upnp.Unmap();
+            if (Modes.IsServer(waitMode)) Upnp.Unmap();
         }
 
         // 等人的房间有真人来了（起：状态包或握手都算，PeerSeen）：停掉 AI（两头的连接 + LocalAi），房间转正成正式联机，
@@ -3802,6 +3894,7 @@ namespace ForNet
             if (w == null || !w.PeerSeen) return;
             var nick = !string.IsNullOrEmpty(w.T.PeerNick) ? w.T.PeerNick : w.Wire.HelloNick;
             waitSes = null;
+            waitRankPending = false;
             w.AiWaiting = false;     // 转正了，不再是 AI 等人的房间（房间列表也不再标"和 AI 对打中"）
             if (ai != null) { ai.Stop(); ai = null; }
             if (aiSession != null) { aiSession.Stop(); aiSession = null; }
@@ -3858,7 +3951,7 @@ namespace ForNet
             else
             {
                 s.Stop();
-                if (mode == "server") Upnp.Unmap();
+                if (Modes.IsServer(mode)) Upnp.Unmap();
             }
             cfg.Mode = "ai";
             cfg.Save();
@@ -3886,9 +3979,11 @@ namespace ForNet
             bool changed = m != cfg.AiRoomMode;
             cfg.AiRoomMode = m;
             cfg.Save();
-            if (changed && waitSes != null) StartWait();     // 开着的房间换方式：重开
-            int i = Array.IndexOf(Modes.Rooms, m);
-            if (aiRoomModeBox.SelectedIndex != i) { loadingMode = true; aiRoomModeBox.SelectedIndex = i; loadingMode = false; }
+            // 换方式：开着的房间重开；还没开成（比如排位在等账号登记）也按新方式再试一次
+            if (changed && cfg.AiRoom && AiRunning) StartWait();
+            var arm = AiRoomModes;
+            int i = Array.IndexOf(arm, m);
+            if (aiRoomModeBox.SelectedIndex != i) { loadingMode = true; aiRoomModeBox.SelectedIndex = Math.Max(0, i); loadingMode = false; }
             Tick();
         }
 
@@ -4595,8 +4690,8 @@ namespace ForNet
                            + (Upnp.Status.Length > 0 ? "\n" + Upnp.Status : "")
                            + (lobbyList.Error.Length > 0 ? "\n" + lobbyList.Error : "");
                 case "ranked":
-                    return L.T(GameInfo.RankedZh + (GameInfo.RankedZh == "排位" ? "" : "（排位）") + "：房间登记在大厅服务器上，和服务器大厅一样建房 / 加入，但只列排位房间；对局走桥接（两边都要开着桥接）。打完两边各报结果，对上才记分（Elo，每天同一对人记 3 场）；规则由服务器定（游戏内面板的\"房间设置\"里能看到）。",
-                               "Ranked: rooms on the lobby server, host / join like the lobby server but only ranked rooms are listed. Both sides report the result; it counts only if they agree (Elo, 3 rated matches per pair per day). The server sets the rules (see Room rules in the in-game panel).")
+                    return L.T(GameInfo.RankedZh + (GameInfo.RankedZh == "排位" ? "" : "（排位）") + "：房间登记在大厅服务器上，和服务器大厅一样建房 / 加入，但只列排位房间；对局默认直连，按房间设置里的\"对局走桥接\"三档走（没装桥接扩展包时一律直连）。打完两边各报结果，对上才记分（Elo，每天同一对人记 3 场）；规则由服务器定（游戏内面板的\"房间设置\"里能看到）。",
+                               "Ranked: rooms on the lobby server, host / join like the lobby server but only ranked rooms are listed. Matches go direct by default and follow the \"play over bridge\" setting (direct only without the bridge extension). Both sides report the result; it counts only if they agree (Elo, 3 rated matches per pair per day). The server sets the rules (see Room rules in the in-game panel).")
                            + (Rank.Me.Length > 0 ? "\n" + L.T("我的分数 ", "My rating ") + Rank.Me.Split('|')[0] : "")
                            + (Rank.Error.Length > 0 ? "\n" + Rank.Error : "")
                            + (lobbyList.Error.Length > 0 ? "\n" + lobbyList.Error : "");
@@ -4782,14 +4877,23 @@ namespace ForNet
             var gp = GamePipe.For(dir);      // 走管道时 state_local.txt 不再更新
             bool gameOn = (gp != null && gp.Connected) || File.Exists(fLocal) && (DateTime.Now - File.GetLastWriteTime(fLocal)).TotalSeconds < 3;
             var w = waitSes;
-            // 排位：在排位方式下（或正连着排位房间）往来；不在时也每 30 秒问一下服务器开没开排位（决定列不列这个标签）
+            // 排位：在排位方式下（或正连着排位房间 / AI 对练同时开着排位等人的房间）往来；不在时也每 30 秒问一下服务器开没开排位（决定列不列这个标签）
             Consent.ServerAddr = cfg.Server ?? "";     // 0.34：server / ranked 的同意绑定地址
+            // w 是 AI 等人房间：排位房要先把账号在服务器登记好（RHELLO / RREG 才会走），所以打开开关、选了排位就按"在用排位"问
+            bool rankWant = Mode == "ranked" || (s != null && s.Mode == "ranked") || (w != null && w.Mode == "ranked")
+                         || (cfg.AiRoom && cfg.AiRoomMode == "ranked");
             if (Consent.Has("play"))     // 0.34 评审：没同意过任何一项就不向服务器发包（RTOP 探测也不发）；RHELLO 带昵称 / pid，要同意过 ranked
-                Rank.Poll(cfg.Server, cfg.Name, (Mode == "ranked" || (s != null && s.Mode == "ranked")) && Consent.Has("ranked"), s);
+                Rank.Poll(cfg.Server, cfg.Name, rankWant && Consent.Has("ranked") && !cfg.Safe, s);
             // 排位的规则本来就由服务器定、在"排位"同意里告知；数值表在排位方式下自动拉，不用再点"获取"。普通方式照旧手动
-            bool rankedAuto = (Mode == "ranked" || (s != null && s.Mode == "ranked")) && !cfg.Safe && Consent.Has("play") && Consent.Has("ranked") && !string.IsNullOrWhiteSpace(cfg.Server);
+            bool rankedAuto = rankWant && !cfg.Safe && Consent.Has("play") && Consent.Has("ranked") && !string.IsNullOrWhiteSpace(cfg.Server);
             if (rankedAuto && (DateTime.UtcNow - cfgAutoAt).TotalSeconds >= 300) { cfgAutoAt = DateTime.UtcNow; if (!cfgFetch.Want) cfgFetch.Request(); }
             else if (!rankedAuto) cfgAutoAt = DateTime.MinValue;
+            // 排位的等人房间刚才没开成（排位还在探测 / 账号还没登记好）：每 5 秒再看一次，就绪了自动开
+            if (waitRankPending && DateTime.UtcNow >= waitRankAt && RankWaitReady)
+            {
+                waitRankAt = DateTime.UtcNow.AddSeconds(RankWaitEvery);
+                StartWait();
+            }
             cfgFetch.Poll(cfg.Server, dir);     // 数值表：面板点了 cfgfetch 才向服务器要（0.34）
             Ext.LocalOnly = cfg.Safe; Ext.Tick();     // X2 插件每轮一次；安全模式下插件的 send 一律拒
             EnforceLevel();

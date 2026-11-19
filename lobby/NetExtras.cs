@@ -33,10 +33,12 @@ namespace ForNet
 
         public static string Valid(string m) { if (m == "steamlobby") m = "server"; if (m == "steam") m = "bridge"; return m == "wan" ? "server" : Array.IndexOf(All, m) >= 0 ? m : "lan"; }     // 0.34 旧的平台大厅 → 服务器大厅；F4c-2 旧方式名桥接平台 → bridge（面板没有桥接平台标签了）     // vlan → lan、wan → server、steamlobby → 桥接平台（v0.34 删大厅；没桥接平台时自然退 lan）
 
-        // 能开房的方式（AI 对战时等人的房间）：除了 ai 都行，顺序同 All
-        static readonly string[] RoomsAll = { "bridge", "server", "lan" }, RoomsPlain = { "server", "lan" };
-        public static string[] Rooms { get { return ShowBridge && Bridge.Available ? RoomsAll : RoomsPlain; } }
-        public static string ValidRoom(string m) { m = Valid(m); return Array.IndexOf(Rooms, m) >= 0 ? m : "lan"; }     // ai / ranked不能开等人的房间
+        // 能开房的方式（AI 对战时等人的房间）：除了 ai 都行，顺序同 All。
+        // 排位（ranked）也算（11-19：AI 对练时可以开一个武林盟主房间等真人，房间挂在排位房间列表里）；
+        // 没装 / 停用排位扩展包时 All 里本来就没有 ranked，这里跟着没有。真正开房时还要这台大厅服务器开了 --ranked、
+        // 账号已登记（Program.StartWait 再查一遍，查不过只提示、AI 对战照常）
+        public static string[] Rooms { get { return Array.FindAll(All, x => x != "ai"); } }
+        public static string ValidRoom(string m) { m = Valid(m); return Array.IndexOf(Rooms, m) >= 0 ? m : "lan"; }     // ai 不能开等人的房间
 
         // 要登桥接平台的方式（选了才初始化桥接平台，见 Bridge.cs 文件头）
         public static bool IsBridge(string m) { return m == "bridge"; }
