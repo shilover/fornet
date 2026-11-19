@@ -2114,18 +2114,27 @@ namespace ForNet
                     string v;
                     if (!hostRules.TryGetValue(k, out v))
                     {
-                        if (k == "bar") v = "2";
-                        else if (k == "bo") v = "3";
-                        else if (k == "dm") v = "100";
-                        else if (k == "ctr" || k == "medok" || k == "npos" || k == "cs" || k == "gcd" || k == "dgc" || k == "sycd" || k == "stg" || k == "dif") v = "1";
-                        else if (k == "swk") { if (!hostRules.TryGetValue("bal", out v)) v = "0"; }     // 11-16 主机旧版没发 swk=：按它的武器平衡（旧版跟着 bal 走）
-                        else if (k == "sp0" || k == "accn") v = "3";
-                        else if (k == "ultx") v = "100";
-                        else if (k == "tl") v = "180";
-                        else if (k == "rdyto") v = "10";
-                        else if (k == "accban") v = "AnimMovement,BreakRegen,MagicWeapon";
-                        else if (k == "wpnban" || k == "edgeban") v = "-";
-                        else v = "0";
+                        // §408 主机没发过 / 旧版主机缺的键：按盟主默认（和客户端 NET.RK_RULES、服务器 RULES / ROOM_RULES 同一份，改一起改）
+                        switch (k)
+                        {
+                            case "bar": v = "2"; break;
+                            case "bo": v = "3"; break;
+                            case "dm": v = "20"; break;
+                            case "ctr": case "npos": case "gcd": case "sycd": case "stg": v = "1"; break;
+                            case "bal": case "std": v = "1"; break;
+                            case "medok": case "dgc": case "cs": case "cfgh": case "ab": v = "0"; break;
+                            case "ult0": case "resm": v = "0"; break;
+                            case "sp0": case "accn": v = "3"; break;
+                            case "ultx": v = "200"; break;
+                            case "acc": v = "2"; break;
+                            case "tl": v = "180"; break;
+                            case "dif": v = "3"; break;
+                            case "rdyto": v = "10"; break;
+                            case "accban": v = "AnimMovement,BreakRegen,HealthResistance,MagicWeapon,SwitchEndure"; break;
+                            case "wpnban": case "edgeban": v = "-"; break;
+                            case "swk": if (!hostRules.TryGetValue("bal", out v)) v = "0"; break;     // 11-16 主机旧版没发 swk=：按它的武器平衡（旧版跟着 bal 走）
+                            default: v = "0"; break;
+                        }
                     }
                     if (i > 0) sb.Append(';');
                     sb.Append(k).Append('=').Append(v);
