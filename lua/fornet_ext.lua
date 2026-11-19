@@ -168,8 +168,13 @@ return function(ctx)
     end
     function EXT.restartPending(p) return p.want ~= nil and p.want ~= (p.state ~= "off") end
     local function stateLabel(p)
+        -- 状态 = 这次游戏里加载了没有；点了开关但没重启时不能写"已停用"（11-19 用户："启用后这里应该显示未加载"）
+        local on = p.state ~= "off"
         local st = p.state == "on" and T("启用", "ON") or p.state == "off" and T("已停用", "OFF") or T("加载失败", "FAILED")
-        if EXT.restartPending(p) then st = st .. (p.want and T("（重启游戏后启用）", " (ENABLED AFTER RESTART)") or T("（重启游戏后停用）", " (DISABLED AFTER RESTART)")) end
+        if EXT.restartPending(p) then
+            st = p.want and T("未加载（重启游戏后加载）", "NOT LOADED (LOADS AFTER RESTART)")
+                      or T("已加载（重启游戏后停用）", "LOADED (DISABLES AFTER RESTART)")
+        end
         return st
     end
     local function loadOne(name)
@@ -319,7 +324,10 @@ return function(ctx)
         local st = stateLabel(p)
         items[#items + 1] = { label = string.format("■ %s  v%s  %s%s", p.title or p.name, tostring(p.version), st, p.author ~= "" and ("  " .. T("作者：", "by ") .. p.author) or ""),
                               col = EXT.restartPending(p) and COL.orange or p.state == "on" and COL.green or p.state == "off" and COL.label or COL.orange }
-        if EXT.restartPending(p) then items[#items + 1] = { label = "  " .. T("需要重启游戏才生效", "RESTART THE GAME TO APPLY"), col = COL.orange } end
+        if EXT.restartPending(p) then
+            items[#items + 1] = { label = "  " .. (p.want and T("请重启游戏加载", "RESTART THE GAME TO LOAD IT")
+                                                         or T("请重启游戏生效", "RESTART THE GAME TO APPLY")), col = COL.orange }
+        end
         if p.state == "off" and not p.want then items[#items + 1] = { label = "  " .. T("扩展包默认停用；启用后重启游戏才会加载", "EXTENSIONS ARE OFF BY DEFAULT; ENABLE, THEN RESTART THE GAME") } end
         if p.why then items[#items + 1] = { label = "  " .. p.why, col = COL.orange } end
         local pd = CONSENT.pending
@@ -354,8 +362,14 @@ return function(ctx)
                                       act = function() CONSENT.grantKeys(allKeys); out("扩展包 %s：同意 %s", p.name, table.concat(allKeys, ",")) end }
             end
             local has = #allKeys > 0
-            items[#items + 1] = { label = want and (has and T("停用（同时撤回同意，重启生效）", "DISABLE (ALSO WITHDRAWS TERMS; RESTART)") or T("停用（重启生效）", "DISABLE (RESTART)"))
-                                          or (has and T("同意并启用（重启生效）", "AGREE AND ENABLE (RESTART)") or T("启用（重启生效）", "ENABLE (RESTART)")),
+            local lbl
+            if want and p.state == "off" then     -- 点了启用、还没重启：按钮是"取消这次启用"，不是"停用"
+                lbl = has and T("取消启用（撤回同意）", "CANCEL ENABLE (WITHDRAW TERMS)") or T("取消启用", "CANCEL ENABLE")
+            else
+                lbl = want and (has and T("停用（同时撤回同意，重启生效）", "DISABLE (ALSO WITHDRAWS TERMS; RESTART)") or T("停用（重启生效）", "DISABLE (RESTART)"))
+                            or (has and T("同意并启用（重启生效）", "AGREE AND ENABLE (RESTART)") or T("启用（重启生效）", "ENABLE (RESTART)"))
+            end
+            items[#items + 1] = { label = lbl,
                                   act = function()
                                       if want then CONSENT.revokeKeys(allKeys) else CONSENT.grantKeys(allKeys) end
                                       if has then out("扩展包 %s：%s %s", p.name, want and "撤回" or "同意", table.concat(allKeys, ",")) end
