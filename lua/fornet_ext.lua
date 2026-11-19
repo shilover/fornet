@@ -350,12 +350,12 @@ return function(ctx)
             local missing = false
             for _, k in ipairs(allKeys) do if not CONSENT.has(k) then missing = true end end
             if want and missing and not pendKey then     -- 启用着但条款没同意（旧版本留下的 / 以前单项撤回过）
-                items[#items + 1] = { label = T("同意上面的条款", "AGREE TO THE TERMS ABOVE"),
+                items[#items + 1] = { label = T("同意上面的条款", "AGREE TO THE TERMS"),
                                       act = function() CONSENT.grantKeys(allKeys); out("扩展包 %s：同意 %s", p.name, table.concat(allKeys, ",")) end }
             end
             local has = #allKeys > 0
-            items[#items + 1] = { label = want and (has and T("停用（同时撤回上面的同意，重启游戏生效）", "DISABLE (ALSO WITHDRAWS THE TERMS; RESTART TO APPLY)") or T("停用（重启游戏生效）", "DISABLE (RESTART THE GAME TO APPLY)"))
-                                          or (has and T("同意上面的条款并启用（重启游戏生效）", "AGREE TO THE TERMS AND ENABLE (RESTART TO APPLY)") or T("启用（重启游戏生效）", "ENABLE (RESTART THE GAME TO APPLY)")),
+            items[#items + 1] = { label = want and (has and T("停用（同时撤回同意，重启生效）", "DISABLE (ALSO WITHDRAWS TERMS; RESTART)") or T("停用（重启生效）", "DISABLE (RESTART)"))
+                                          or (has and T("同意并启用（重启生效）", "AGREE AND ENABLE (RESTART)") or T("启用（重启生效）", "ENABLE (RESTART)")),
                                   act = function()
                                       if want then CONSENT.revokeKeys(allKeys) else CONSENT.grantKeys(allKeys) end
                                       if has then out("扩展包 %s：%s %s", p.name, want and "撤回" or "同意", table.concat(allKeys, ",")) end
