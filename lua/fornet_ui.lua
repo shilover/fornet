@@ -1068,9 +1068,12 @@ function BFRIENDS.items(lb, items, page)
         if not inSession then
             items[#items + 1] = { label = T("开房（好友可见）", "HOST A ROOM (VISIBLE TO FRIENDS)"),
                                   act = function() consent().ask("bridge_match", function() netuiCmd("host", "bridge=1\n") end) end }
+            -- 11-19：没装 / 没启用多人模块时没有 mp 那条同意，「开房（最多 N 人）」点了只会卡在同意页 → 不显示
             local mpn = (BASEHOOK and BASEHOOK.mp and BASEHOOK.mp.cfg and BASEHOOK.mp.cfg.size) or 4
-            items[#items + 1] = { label = string.format(T("开房（好友可见，最多 %d 人）", "HOST A ROOM (VISIBLE TO FRIENDS, UP TO %d)"), mpn),
-                                  act = function() consent().ask("bridge_match", function() netuiCmd("mphost", "bridge=1\nn=" .. mpn .. "\n") end) end }
+            if BASEHOOK and BASEHOOK.mp then
+                items[#items + 1] = { label = string.format(T("开房（好友可见，最多 %d 人）", "HOST A ROOM (VISIBLE TO FRIENDS, UP TO %d)"), mpn),
+                                      act = function() consent().ask("bridge_match", function() netuiCmd("mphost", "bridge=1\nn=" .. mpn .. "\n") end) end }
+            end
         end
     end
     -- 11-15 用户："好友页里没必要再加一个（隐身），主面板上有最近的入口"：隐身开关只在"最近一起玩过的人"页，这里不再重复
@@ -1366,6 +1369,12 @@ function CONSENT.gate(cmd, extra, replay)
         local lb = netuiRead(now()) or {}
         keys = { "play", CONSENT.MODE_KEY[lb.airoommode or "lan"] }
     else return true end
+    -- 11-19：没装 / 没启用多人模块时没人登记 mp 这条同意。以前照样把 "mp" 加进 keys，面板翻到一条没有文案的同意页
+    -- （只写 "This needs your consent first (the text is missing)"），房开不出来也进不去。这里直接拦下并说清楚。
+    if isMp and not CONSENT.TEXT.mp then
+        netuiFlash(T("没装多人模块：只能开 / 加入旧版 1v1 房间", "NO MULTIPLAYER MODULE: CLASSIC 1V1 ROOMS ONLY"))
+        return false
+    end
     if isMp then keys[#keys + 1] = "mp" end
     if not isMp and CONSENT.TEXT.spec and keys[2] ~= nil and (cmd == "host" or cmd == "join" or cmd == "spectate")
        and not ((netuiRead(now()) or {}).mode == "ai") then keys[#keys + 1] = "spec" end     -- 11-14：观战 mod 的项（观众收到你的对局数据）
