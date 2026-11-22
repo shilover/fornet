@@ -4171,6 +4171,7 @@ namespace ForNet
                         }
                     }
                     break;
+                case "aicfg":    // Adapter-owned local AI settings; same atomic validation as loadouts.
                 case "aiload":   // AI 装备：w=<族>|<路径> e=<影之武装路径或空> o=<皮肤行名或空> med=<0–10> acc=<- 或 GA,GA>；给了哪个改哪个，对战中也能换
                     {
                         var nl = cfg.AiLoad.Clone();
