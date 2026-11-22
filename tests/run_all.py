@@ -42,6 +42,7 @@ if lupa:
 else:
     print("没有 lupa：跳过 test_host / test_ext")
 run("test_wire_4n", [])
+run("test_mesh_alt_hello", [exe])
 for t in ("test_game_manifest", "test_lobby_cmd", "test_consent_gate", "test_history", "test_ext_lobby", "test_server_lobby"):
     d = os.path.join(work, t); os.makedirs(d)
     run(t, [exe, d])
