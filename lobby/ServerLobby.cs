@@ -253,6 +253,8 @@ namespace ForNet
         public int FallbackHostPid = 1;      // 客机：房主编号（房间列表标签 hb=，换过房主才有；没有 = 1）
         uint mpFbH;                          // 客机：连房主的那条桥接（0 = 没走桥接）
         DateTime mpFbAt, mpFbHelloAt;
+        DateTime mpFbTryAt = DateTime.MinValue;     // 一直桥接：上次尝试经桥接连房主（当场失败后限频重试）
+        const double MpFbRetrySec = 3.0;
         bool mpFbLostLogged;
         readonly Dictionary<string, int> mpSidPid = new Dictionary<string, int>();     // 房主：大厅会话号 → 编号（同一人改经桥接时沿用）
         bool MpFbHost { get { return isMpHost && mesh != null && FallbackMyId != 0 && Bridge.Ready && Bridge.MyId != 0; } }
@@ -1683,7 +1685,17 @@ namespace ForNet
                 if (MpAlwaysBridge)
                 {
                     // PEER 已给出会话号和桥接 ID；不等三轮 UDP，也绝不回落直连。
-                    if (sid != null && !TryMpBridgeFallback(now)) joined = false;
+                    // 桥接当场拒绝（句柄 0：桥没就绪、对方 ID 不对、同一账号连自己…）时隔 MpFbRetrySec 秒再试：
+                    // 以前每轮 Tick（约 6 ms）都重连一次，一分钟往 net_conn.log / bridge_conn.log 各写四千多行
+                    if (sid != null && (now - mpFbTryAt).TotalSeconds >= MpFbRetrySec)
+                    {
+                        mpFbTryAt = now;
+                        if (!TryMpBridgeFallback(now))
+                        {
+                            joined = false;
+                            if (error.Length > 0) noRelay = true;     // 提示留到下次重试（重发 JOIN 拿到的 PEER 不清），进了房才收
+                        }
+                    }
                     return;
                 }
                 Punch(now, WireTag.P + "HELLO\nsid=" + sid + "\nmp=1\nlan=" + LobbyServer.LocalAddr(LocalPort) + "\n" + (MpMesh.HideIpPref ? "hideip=1\n" : "") + (MpCfg.JoinWatch ? "watch=1\n" : "") + MpMesh.V6HelloLine(LocalPort));     // watch=1 观战加入     //
