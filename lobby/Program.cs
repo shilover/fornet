@@ -3423,6 +3423,7 @@ namespace ForNet
             text = (text ?? "").Trim();
             if (Mode == "ai") { StartSession("host", null); return; }     // 本地 AI 没有"加入"，一律当开始
             if (!AutoBridge(text)) return;
+            if (!EnsureRoomPolicy(text)) return;
             // "只观战"开着时点房间列表里没满的房间：以观战者身份进去；主机不认观战（或排位）就不加入、提示
             bool canWatch;
             if (SpecCfg.NoQueue && IsMpTarget(text)) nextMpWatch = true;     // 新版房间：照常加入，进去后当"只看不上场"
@@ -3494,6 +3495,7 @@ namespace ForNet
         {
             text = (text ?? "").Trim();
             if (Mode == "ranked" || Mode == "ai") { Warn(L.T("这种连接方式不能观战", "Spectating is not available in this mode")); return; }
+            if (!EnsureRoomPolicy(text)) return;
             // 新版房间（多人 / 对决，全互连）：观战 = 加入房间 + 只看不上场；状态包由选手 / 转发机直接发来，不经大厅服务器转发（旧的 WatchLink 只留给旧版 1v1）
             if (IsMpTarget(text)) { nextMpWatch = true; Join(text.StartsWith("watch:") ? "room:" + text.Substring(6) : text); return; }
             if (!AutoBridge(text)) return;
@@ -3533,17 +3535,55 @@ namespace ForNet
         {
             if (string.IsNullOrEmpty(text)) return false;
             if (roomMp.ContainsKey(text)) return true;
-            var t = text.StartsWith("watch:") ? text.Substring(6) : text.StartsWith("room:") ? text.Substring(5) : null;
-            if (t == null) return false;
+            var t = text.StartsWith("watch:") ? text.Substring(6) : text.StartsWith("room:") ? text.Substring(5) : text;
             int at = t.IndexOf('@');
             var code = (at >= 0 ? t.Substring(0, at) : t).Trim().ToUpperInvariant();
             return roomMp.ContainsKey(code) || roomMp.ContainsKey("room:" + code);
+        }
+
+        bool EnsureRoomPolicy(string text)
+        {
+            if (!Modes.IsServer(Mode) || string.IsNullOrEmpty(text)) return true;
+            var room = text.StartsWith("watch:") ? text.Substring(6) : text.StartsWith("room:") ? text.Substring(5) : text;
+            int at = room.IndexOf('@');
+            var code = (at >= 0 ? room.Substring(0, at) : room).Trim().ToUpperInvariant();
+            if (code.IndexOfAny(new[] { '.', ':', ' ', '|' }) >= 0 || code.Length < 4 || code.Length > 16) return true;
+            var source = at >= 0 ? room.Substring(at + 1).Trim() : cfg.Server.Trim();
+            string cachedSource;
+            if (roomBridge.ContainsKey(code) && roomPolicySource.TryGetValue(code, out cachedSource)
+                && string.Equals(source, cachedSource, StringComparison.OrdinalIgnoreCase)) return true;
+            var row = LobbyList.Lookup(source, code);
+            if (row == null)
+            {
+                Warn(L.T("未查到房间连接方式，请刷新房间列表后重试", "Room connection policy unavailable; refresh the room list and retry"));
+                return false;
+            }
+            if (at < 0 && row.Length > 4 && row[4].Trim().Length > 0)
+            {
+                Warn(L.T("这是互通房间，请用完整房间号加入：", "Linked room: join using the full room code: ") + code + "@" + row[4].Trim());
+                return false;
+            }
+            roomPolicySource[code] = source;
+            roomMp.Remove(code);
+            roomMp.Remove("room:" + code);
+            roomMp.Remove(text);
+            roomBridge[code] = row.Length > 10 && row[10].Trim() == "1";
+            roomFallback[code] = row.Length > 10 && row[10].Trim() == "2";
+            roomFbPid[code] = ParseHostPidTag(row.Length > 11 ? row[11] : "");
+            bool mp;
+            ParseMpCandTag(row.Length > 11 ? row[11] : "", out mp);
+            if (mp) { roomMp[code] = true; roomMp[text] = true; }
+            return true;
         }
 
         bool StartSession(string role, IPEndPoint peer, ulong bridgeHost, string room)
         {
             // 临时切到桥接方式（AutoBridge：好友页开房 / 加入好友）后马上开会话：StopSession 里的 Tick 看到"没会话 + 临时切过"会立刻切回去，
             // 新会话就按原来的方式开了（以前从"最近"页加入好友也是这样）。这次先收起切回标记，开完再放回
+            // StopSession 会 Tick / 重刷当前大厅列表；先保存目标服务器刚查询到的策略。
+            bool targetBridge = IsBridgeRoom(room);
+            bool targetFallback = IsFallbackRoom(room);
+            int targetHostPid = FallbackHostPidOf(room);
             var keepAuto = autoBridgeFrom;
             autoBridgeFrom = null;
             StopSession();
@@ -3565,26 +3605,20 @@ namespace ForNet
                 IRoomLink rl = null;      // 经大厅服务器开房 / 加入的（服务器大厅 sl，或排位 BridgeRoomLink）
                 // 0.34（最终方案 3）：服务器大厅 / 排位的房间默认 UDP 直连（不中转）；房主开了"对局走 " + Bridge.Svc的房经桥接平台连（BridgeRoomLink），
                 // 客机按房间列表第 11 列判断对方的房是不是桥接平台房（roomBridge）。观战不走桥接平台房
-                // 三档：主机按自己的设置（一直桥接 = BridgeRoomLink；桥接扩展包没装 / 没启用时退回直连，不然整个开不了房）；
+                // 三档：主机按自己的设置（一直桥接：旧版 BridgeRoomLink / 新版 ServerLink + Mesh；桥接扩展包没装时退回直连）；
                 // 客机一律按主机的（房间列表第 11 列：1 = 一直桥接、2 = 直连失败时走桥接），自己的设置不管
                 bool bridgeUsable = Modes.ShowBridge && Bridge.Available;
-                // 一直桥接的房走 BridgeRoomLink，它只有 1v1（没有 IMpLink）：多人房间以前在这里悄悄变成旧版 1v1 房（不报 mp=1、列表标 [旧版]、面板没有玩法设置）。
-                // 多人房间按"直连失败时走桥接"开（那条退路），并明说
-                bool mpHostNoBridge = role == "host" && MpCfg.Max >= 2 && Modes.IsServer(Mode) && cfg.BridgeRoom;
+                // 新版房保留 ServerLink / IMpLink，入房由 Mesh 的 JoinBridge 承接；旧版 1v1 / 排位仍用 BridgeRoomLink。
+                bool mpAlwaysBridge = Modes.IsServer(Mode) && !Program.RankUdp
+                    && (role == "host" ? MpCfg.Max >= 2 && cfg.BridgeRoom : MpCfg.Join && targetBridge);
                 bool bridgeRoom = Modes.IsServer(Mode) && role != "spec" && !Program.RankUdp
-                              && (role == "host" ? cfg.BridgeRoom && bridgeUsable && !mpHostNoBridge : IsBridgeRoom(room));
-                if (role == "host" && Modes.IsServer(Mode) && cfg.BridgeRoom && !bridgeUsable)
+                              && !mpAlwaysBridge && (role == "host" ? cfg.BridgeRoom && bridgeUsable : targetBridge);
+                if (role == "host" && Modes.IsServer(Mode) && cfg.BridgeRoom && !bridgeUsable && !mpAlwaysBridge)
                     NetLog.W("房间设置是\"一直桥接\"，但桥接扩展包没装 / 没启用：这间房只走直连");
-                if (mpHostNoBridge)
-                {
-                    NetLog.W("多人房间不支持\"一直桥接\"：这间房按\"直连失败时走桥接\"开");
-                    Warn(L.T("多人房间不支持\"一直桥接\"，这间房改成直连失败时走桥接",
-                                         "Multiplayer rooms can't use \"always bridge\"; this room uses the bridge only if direct fails"));     // 只是提示，接着开房
-                }
                 // 安全模式：只许局域网 / 本地 AI
                 if (cfg.Safe && Mode != "lan" && Mode != "ai") { Warn(SafeMsg()); return false; }
                 // 0.34 评审：从"最近"页 / 手输房间号进桥接平台房时 Lua 不知道它是桥接平台房、没问过 steam_match——这里兜底：自己没开"对局走 " + Bridge.Svc就不进
-                if (bridgeRoom && role == "client" && (!bridgeUsable || !(Consent.All || Consent.Has("bridge_match"))))     // 看能不能、同意没，不看自己的设置
+                if ((bridgeRoom || mpAlwaysBridge) && role == "client" && (!bridgeUsable || !(Consent.All || Consent.Has("bridge_match"))))     // 看能不能、同意没，不看自己的设置
                 {
                     Warn(!bridgeUsable ? L.T("这间房主机设成一直桥接：要装上桥接扩展包并在它的插件页启用（重启游戏生效）", "The host set this room to always use the bridge: install and enable the bridge extension (restart the game)")
                                        : L.T("这间房主机设成一直桥接：先同意桥接（面板会问）", "The host set this room to always use the bridge: agree to the bridge first (the panel asks)"));
@@ -3652,10 +3686,17 @@ namespace ForNet
                     if (Modes.IsServer(Mode) && !(Mode == "ranked" && Program.RankUdp) && role != "spec" && peer == null)     // 服务器大厅和排位都算（同"一直桥接"的判断）
                     {
                         bool agreed = Consent.All || Consent.Has("bridge_match");
-                        if (role == "client") { sl.FallbackRoom = IsFallbackRoom(room); sl.FallbackHostPid = FallbackHostPidOf(room); }
-                        bool want = role == "host" ? (cfg.BridgeMode == 1 || mpHostNoBridge) : sl.FallbackRoom;
+                        sl.MpAlwaysBridge = mpAlwaysBridge;
+                        if (role == "client") { sl.FallbackRoom = mpAlwaysBridge || targetFallback; sl.FallbackHostPid = targetHostPid; }
+                        bool want = mpAlwaysBridge || (role == "host" ? cfg.BridgeMode == 1 : sl.FallbackRoom);
                         if (want && bridgeUsable && agreed && Bridge.Init() && Bridge.MyId != 0) sl.FallbackMyId = Bridge.MyId;
-                        if (want) NetLog.W("" + (role == "host" ? "主机" : "客机") + "：直连失败时走桥接 " + (sl.FallbackMyId != 0 ? "准备好了" : "用不了（" + (!bridgeUsable ? "没有桥接扩展包" : !agreed ? "没同意桥接" : "桥没就绪") + "），只走直连"));
+                        if (mpAlwaysBridge && sl.FallbackMyId == 0)
+                        {
+                            sl.Close();
+                            Warn(L.T("一直桥接房间：桥接未就绪或未同意桥接，没有连接", "Always-bridge room: the bridge is not ready or consent is missing; not connected"));
+                            return false;
+                        }
+                        if (want) NetLog.W("" + (role == "host" ? "主机" : "客机") + (mpAlwaysBridge ? "：新版房一直桥接 " : "：直连失败时走桥接 ") + (sl.FallbackMyId != 0 ? "准备好了" : "用不了（" + (!bridgeUsable ? "没有桥接扩展包" : !agreed ? "没同意桥接" : "桥没就绪") + "），只走直连"));
                     }
                     rl = sl;
                 }
@@ -4465,6 +4506,7 @@ namespace ForNet
             cands.Clear();
             roomWatch.Clear();
             roomBridge.Clear();
+            roomPolicySource.Clear();
             roomMp.Clear();
             candTags.Clear();
             var s = session;
@@ -4513,6 +4555,7 @@ namespace ForNet
                     bool watch = r[3] == "1" && r.Length > 7 && r[7] == "1";
                     bool sr = r.Length > 10 && r[10].Trim() == "1";     // 0.34 第 11 列 = 对局走桥接平台的房
                     roomBridge[r[0].Trim().ToUpperInvariant()] = sr;
+                    roomPolicySource[r[0].Trim().ToUpperInvariant()] = home.Length > 0 ? home : cfg.Server.Trim();
                     var target = (watch ? "watch:" : "room:") + r[0] + (home.Length > 0 ? "@" + home : "");
                     bool isMpRoom;
                     string tgStr = ParseMpCandTag(r.Length > 11 ? r[11] : "", out isMpRoom);
@@ -4745,6 +4788,7 @@ namespace ForNet
 
         // 当前 / 最近的对手（最多 5 个，新的在前），面板拉黑 / 举报用。AI 不算；观战时记的是主机
         readonly Dictionary<string, bool> roomBridge = new Dictionary<string, bool>();   // 0.34 房间号 → 房主开了"对局走 " + Bridge.Svc（房间列表第 11 列）
+        readonly Dictionary<string, string> roomPolicySource = new Dictionary<string, string>();
         readonly Dictionary<string, bool> roomMp = new Dictionary<string, bool>();
         readonly Dictionary<string, string> candTags = new Dictionary<string, string>();
         string currentMpTag = "m=elim;tm=0;st=idle";

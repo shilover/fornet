@@ -240,11 +240,12 @@ namespace ForNet
         // 自己允不允许走服务器中转（设置里的"允许中转"，默认关）。客机关着：直连不通也不请求中转；
         // 主机关着：登记房间时告诉服务器（REG 第 7 段 0），服务器拒绝给这个房间中转；旧服务器不认这一段，主机就不理中转来的包
         public bool AllowRelay;
-        // 房间设置"对局走桥接"三档里的"直连失败时走桥接"（"一直桥接"走 BridgeRoomLink，不在这里）。客机一律按主机的设置：
+        // 房间设置"对局走桥接"：旧版一直桥接仍用 BridgeRoomLink；新版一直桥接 / 直连失败桥接均保留这里的 IMpLink。
         // 主机：FallbackMyId = 自己的桥接 ID（同意过桥接、桥在才给）→ 登记带上（REG 第 11 段）、第 16 段 = 2；一直开着桥接监听，直连和桥接谁先通用谁
         // 客机：房间列表第 11 列 = 2 → FallbackRoom；同意过桥接才给 FallbackMyId（JOIN 第 6 段）。直连 Tries 次都不通 → 改经桥接连主机
         public ulong FallbackMyId;
         public bool FallbackRoom;
+        public bool MpAlwaysBridge;             // 新版房：大厅介绍后立即 JoinBridge，禁止对局 UDP 直连
         BridgeLink fb;
         bool bridged, fbFailed;
         ulong fbPeer;                        // 客机：主机的桥接 ID；主机：服务器介绍的客机桥接 ID
@@ -453,7 +454,10 @@ namespace ForNet
             return "\nmpmesh=" + mesh.StatsLine() + "\nmptx=" + mesh.MpTx + "\nmprx=" + mesh.MpRx + "\nmpdual=" + mesh.MpDual
                 + "\nmpfwd=" + mesh.MpFwd + "\nmpdup=" + mesh.MpDup + "\nmpdz=" + mesh.DzStat + "\nmpprobe=" + mesh.ProbeStats()
                 + (serverScores.Length > 0 ? "\nmps=" + serverScores : "") + (serverMpm.Length > 0 ? "\nsrvmpm=" + serverMpm : "")
-                + (hostPid >= 0 ? "\nmphost=" + hostPid : "");
+                + (hostPid >= 0 ? "\nmphost=" + hostPid : "")
+                + "\nmpbridge=" + (MpAlwaysBridge ? "always" : FallbackMyId != 0 ? "fallback" : "off")
+                + "\nmpjoinbridge=" + (mpFbH != 0 ? "1" : "0")
+                + "\nmpdecoded=" + mesh.MpDecoded + "\nmpdecodewait=" + mesh.MpDecodeWait;
         }
         public string LocalAddrForHost(int hostPid)
         {
@@ -552,7 +556,7 @@ namespace ForNet
         // 客机往每个地址都打洞，两条都通时房主以前按地址认人、分了两个编号（多出来的"影子号"收不到状态包，却一直占名额，还多让掉一个 AI）。
         // 现在：会话号已经对应一个还活着的编号、而且那个编号 3 秒内有动静 → 认成同一个人。另一族的地址挂成它的 AltHandle
         // （ByHandle 也认它的包；房主这边 AltStep 不换路），同一族的丢掉。原编号 3 秒都没动静才放行（NAT 换端口重进照旧按新人走、原编号自己超时）
-        int dupSidLogged;
+        int dupSidLogged, unknownMpState;
         bool SameSessionOtherAddr(object from, string helloSid, DateTime now)
         {
             var fe = from as IPEndPoint;
@@ -630,6 +634,9 @@ namespace ForNet
             int r = peers.NoteMp(from, hello, MpMax, MpCfg.Cap, MpCfg.Lost, out p, extraUsed, existingPid);
             if (r == 0)
             {
+                // 不认识的地址发来的状态包：不交给游戏（下面照旧返回 true，会话结束的"共收状态包"仍会算上它）
+                if (!hello && !viaFb && s.Contains("seq=") && unknownMpState++ < 3)
+                    NetLog.W("多人：地址 " + NetLog.Ip(from as IPEndPoint) + " 不对应任何编号，它发来的状态包丢掉（不交给游戏）");
                 return !Link.IsSpecHello(s) && (s.Contains("seq=") || s.StartsWith(WireTag.P + "HELLO", StringComparison.Ordinal));
             }
             if (r < 0) { if (hello && mesh != null) mesh.DuelRefuseFull(from); return true; }     // 对决模式满了明说；普通多人房满了不回绝：握手留着，有人走了就补上
@@ -637,7 +644,7 @@ namespace ForNet
             {
                 if (!string.IsNullOrEmpty(helloSid)) { if (mpSidPid.Count > 64) mpSidPid.Clear(); mpSidPid[helloSid] = p.Pid; }     // 记下大厅会话号 → 编号
                 log(L.T("多人：玩家加入，编号 ", "Multi: player joined, id ") + p.Pid + " " + (viaFb ? L.T("（经桥接）", "(via bridge)") : fromAddr));
-                NetLog.W("多人：玩家加入 编号 " + p.Pid + " " + (viaFb ? "经桥接（直连失败走桥接）" : NetLog.Ip((IPEndPoint)from)));
+                NetLog.W("多人：玩家加入 编号 " + p.Pid + " " + (viaFb ? (MpAlwaysBridge ? "经桥接（一直桥接）" : "经桥接（直连失败走桥接）") : NetLog.Ip((IPEndPoint)from)));
                 if (mesh != null)
                 {
                     mesh.AddPlayer(p.Pid, from, fromAddr, p.BridgeId, p.Nick, viaFb ? "" : Link.HelloLan(s), viaFb || Link.HelloHide(s), viaFb ? "" : Link.HelloV6(s));
@@ -663,6 +670,7 @@ namespace ForNet
             if (!serverRoom && !isMpHost && !isMpJoin) return;          // 普通 1v1 服务器大厅不开 Mesh
             if (mesh != null) return;
             mesh = new MpMesh();
+            if (MpAlwaysBridge) { mesh.HideMe = true; mesh.AllowHostMigration = false; }     // 强制房不迁移到 UDP 新房主
             mesh.IsHost = serverRoom ? false : hostMode;
             mesh.NeedVerifiedDirect = true;   // 介绍的地址不代表直连通了（可能被 NAT 挡住），收到包才算
             mesh.MyPid = serverRoom ? serverPid : (hostMode ? 1 : 0);
@@ -961,7 +969,12 @@ namespace ForNet
         }
 
         void Raw(string text, IPEndPoint to) { Raw(Kv.Utf8.GetBytes(text), to); }
-        void Raw(byte[] b, IPEndPoint to) { try { udp.Send(b, b.Length, to); } catch (Exception) { } }
+        void Raw(byte[] b, IPEndPoint to)
+        {
+            // 强制策略覆盖所有 Mesh 探测 / 迁移 / 备用路径，不只是初次入房握手。
+            if (MpAlwaysBridge && (pick == null || !pick.Is(to))) return;
+            try { udp.Send(b, b.Length, to); } catch (Exception) { }
+        }
         // 句柄可能是 UDP 端点，也可能是经桥接入房的桥接连接号
         void RawTo(byte[] b, object to)
         {
@@ -1049,7 +1062,7 @@ namespace ForNet
                     got += FromServer(data, now);
                     continue;
                 }
-                if (SimNoDirect) continue;
+                if (SimNoDirect || MpAlwaysBridge) continue;
                 if (serverRoom)
                 {
                     // 服务器介绍后玩家之间的直连包（MeshMp 协议 + 带 src 的状态包）。
@@ -1490,7 +1503,7 @@ namespace ForNet
                 {
                     var a0 = LobbyServer.ParseEp(pub);
                     var b0 = LobbyServer.ParseEp(local);
-                    mpPunches[newSid] = new MpPunch { Sid = newSid, Pub = a0, Local = b0, Alt = altEp, Until = now.AddSeconds(Tries * TryWindow + 2) };
+                    if (!MpAlwaysBridge) mpPunches[newSid] = new MpPunch { Sid = newSid, Pub = a0, Local = b0, Alt = altEp, Until = now.AddSeconds(Tries * TryWindow + 2) };
                     Log(L.T("多人：有人要加入（", "Multi: player joining (") + pub + L.T("），开始打洞", "), punching"));
                     NetLog.W("多人：有人要加入 会话 " + newSid + "，对方公网 " + NetLog.Ip(pub) + "，内网 " + NetLog.Ip(local));
                     return;
@@ -1577,8 +1590,8 @@ namespace ForNet
                 int listedCur = MpMesh.Listed(mesh, MpCount + 1);     // 对局外 AI 不算人数（真人来了会挤掉 AI）
                 bool full = isMpHost ? (listedCur >= MpMax) : (now - lastFromPeer).TotalSeconds < 3;
                 if (!regLogged) { regLogged = true; NetLog.W("开始登记房间：大厅服务器 " + ServerDiag + "，本机内网 " + NetLog.Ip(LobbyServer.LocalAddr(LocalPort)) + "，允许中转 " + (AllowRelay ? "是" : "否") + "（每 2 秒一次）"); }
-                bool mpFb = MpFbHost;     // 多人房直连失败时走桥接
-                string mpExtra = isMpHost ? ("|" + (mpFb ? "2" : "0") + "|" + MpMax + "|" + listedCur + "|" + LobbyServer.Clean(MpTag + MpMesh.ListedTag(mesh) + (mpFb && mesh.MyPid > 1 ? ";hb=" + mesh.MyPid : ""))) : "";
+                bool mpFb = MpFbHost || (isMpHost && MpAlwaysBridge && mesh != null && FallbackMyId != 0);     // 桥暂不可用也保留强制策略，不能谎报成直连房
+                string mpExtra = isMpHost ? ("|" + (mpFb ? (MpAlwaysBridge ? "1" : "2") : "0") + "|" + MpMax + "|" + listedCur + "|" + LobbyServer.Clean(MpTag + MpMesh.ListedTag(mesh) + (mpFb && mesh.MyPid > 1 ? ";hb=" + mesh.MyPid : ""))) : "";
                 Raw(WireTag.S + "|REG|" + key + "|" + LobbyServer.Clean(name) + "|" + LobbyServer.Clean(MapOf()) + "|" + (full ? "1" : "0")
                     + "|" + LobbyServer.LocalAddr(LocalPort) + "|" + (AllowRelay ? "1" : "0")
                     + (RankPid != null ? "|1|" + RankPid + "|" : "|0||") + ((fb != null && !isMpHost) || mpFb ? FallbackMyId.ToString() : "") + "|" + (SpecCfg.Max > 0 ? "1" : "0") + "|" + SpecCfg.Max + "|" + (AiRoom ? "1" : "0")
@@ -1666,6 +1679,12 @@ namespace ForNet
                     if (!joinLogged) { joinLogged = true; joinAt = now; NetLog.W("发多人加入请求（JOIN）：房间 " + roomId + "，本机内网 " + NetLog.Ip(LobbyServer.LocalAddr(LocalPort)) + "，第 " + attempt + " 次"); }
                     string brMp = FallbackRoom && FallbackMyId != 0 ? FallbackMyId.ToString() : "";     // 多人房直连失败走桥接：第 6 段 = 自己的桥接 ID
                     Raw(WireTag.S + "|JOIN|" + roomId + "|" + LobbyServer.LocalAddr(LocalPort) + (brMp != "" ? "||" + brMp : ""), server);
+                }
+                if (MpAlwaysBridge)
+                {
+                    // PEER 已给出会话号和桥接 ID；不等三轮 UDP，也绝不回落直连。
+                    if (sid != null && !TryMpBridgeFallback(now)) joined = false;
+                    return;
                 }
                 Punch(now, WireTag.P + "HELLO\nsid=" + sid + "\nmp=1\nlan=" + LobbyServer.LocalAddr(LocalPort) + "\n" + (MpMesh.HideIpPref ? "hideip=1\n" : "") + (MpCfg.JoinWatch ? "watch=1\n" : "") + MpMesh.V6HelloLine(LocalPort));     // watch=1 观战加入     //
                 if ((now - attemptAt).TotalSeconds < TryWindow) return;
@@ -1864,8 +1883,9 @@ namespace ForNet
             mpFbHelloAt = DateTime.MinValue;
             mesh.HideMe = true;
             error = "";
-            log(L.T("多人直连 " + Tries + " 次都没通，改经桥接连房主", "Direct failed " + Tries + " times, joining the host over the bridge"));
-            NetLog.W("客机：多人直连 " + Tries + " 次都没通，改经桥接连房主（房主编号 " + FallbackHostPid + "）");
+            log(MpAlwaysBridge ? L.T("新版房一直桥接，直接经桥接连房主", "Always-bridge room: joining the host over the bridge")
+                : L.T("多人直连 " + Tries + " 次都没通，改经桥接连房主", "Direct failed " + Tries + " times, joining the host over the bridge"));
+            NetLog.W("客机：" + (MpAlwaysBridge ? "新版房一直桥接，直接经桥接连房主" : "多人直连 " + Tries + " 次都没通，改经桥接连房主") + "（房主编号 " + FallbackHostPid + "）");
             return true;
         }
         void MpFbTick(DateTime now)
@@ -1892,6 +1912,7 @@ namespace ForNet
             {
                 mpFbLostLogged = true;     // 之后照普通掉线处理（会话那边按收包超时判）；mpFbH 留着，免得又往房主打洞、被当成新人再分一个编号
                 NetLog.W("客机：连房主的桥接断了（已在房里，编号 " + myPid + "）");
+                if (MpAlwaysBridge) error = L.T("房主桥接已断开：请重新加入；房主离开后需要重开房间", "Host bridge disconnected: rejoin; if the host left, create a new room");
             }
         }
         void CloseMpFb()
@@ -1899,7 +1920,7 @@ namespace ForNet
             if (mpFbH == 0) return;
             mpFbH = 0;
             mpFbLostLogged = false;
-            if (mesh != null) { try { mesh.CloseJoinBridge(); } catch (Exception) { } mesh.HideMe = MpMesh.HideIpPref; }
+            if (mesh != null) { try { mesh.CloseJoinBridge(); } catch (Exception) { } mesh.HideMe = MpAlwaysBridge || MpMesh.HideIpPref; }
         }
 
         // 客机：直连 Tries 次都不通 → 主机允许、自己也同意过桥接时改经桥接连。返回 true = 已切过去
@@ -2562,6 +2583,43 @@ namespace ForNet
         DateTime lastAsk = DateTime.MinValue, lastAnswer = DateTime.MinValue;
         List<string[]> rooms = new List<string[]>();   // {房间号, 名字, 地图, 已满[, 所在服务器（空 = 这台）]}
         public string Error = "";
+
+        // 手输房间号没有列表缓存时，先确定协议 / 桥接策略，不能猜成旧版 UDP 房。
+        public static string[] Lookup(string addr, string code)
+        {
+            var ep = LobbyServer.Resolve(addr);
+            if (ep == null) return null;
+            try
+            {
+                using (var query = NetBind.QueryUdp(ep))
+                {
+                    query.Client.ReceiveTimeout = 500;
+                    var route = new ServerPick(ep, query);
+                    var request = Kv.Utf8.GetBytes(WireTag.S + "|LIST|" + code.Trim().ToUpperInvariant());
+                    for (int attempt = 0; attempt < 4; attempt++)
+                    {
+                        route.SendQuery(query, request);
+                        try
+                        {
+                            IPEndPoint from = null;
+                            var data = query.Receive(ref from);
+                            if (!route.Is(NetBind.Norm(from))) continue;
+                            var lines = Kv.Utf8.GetString(data).Split('\n');
+                            if (lines[0] != WireTag.S + "|ROOMS") continue;
+                            for (int i = 1; i < lines.Length; i++)
+                            {
+                                var row = lines[i].Split('\t');
+                                if (row.Length >= 4 && string.Equals(row[0].Trim(), code.Trim(), StringComparison.OrdinalIgnoreCase)) return row;
+                            }
+                            return null;
+                        }
+                        catch (SocketException) { }
+                    }
+                }
+            }
+            catch (Exception ex) { NetLog.W("查询入房策略失败：" + ex.Message); }
+            return null;
+        }
 
         public List<string[]> Poll(string addr)
         {

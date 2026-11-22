@@ -440,6 +440,12 @@ namespace ForNet
         public Action<string> Log = delegate { };
         public bool Enabled;
         public long MpTx, MpRx, MpDual, MpFwd, MpDup;
+        long mpDecoded, mpDecodeWait;
+        public long MpDecoded { get { return System.Threading.Interlocked.Read(ref mpDecoded); } }
+        public long MpDecodeWait { get { return System.Threading.Interlocked.Read(ref mpDecodeWait); } }
+        readonly object receiveDiagSync = new object();
+        readonly HashSet<int> decodedSeen = new HashSet<int>();
+        readonly Dictionary<int, DateTime> decodeWaitLog = new Dictionary<int, DateTime>();
         public static volatile int BridgeModePref = 1;
         public bool BridgePrimary;
         public int HostBridgeMode = -1;
@@ -556,6 +562,9 @@ namespace ForNet
             {
                 MpPeerState p;
                 if (!peers.TryGetValue(pid, out p)) { p = new MpPeerState(); p.Pid = pid; peers[pid] = p; }
+                // 同一个人从另一族地址（已记成 AltHandle）又发来加入握手：不拿它顶掉当前那条。以前会把 Handle 换成另一族、
+                // 原来那条（对方实际发状态包用的）就谁也不认了：它的状态包全被当成陌生地址丢掉，房主看不到这个人的替身（1122 日志 RXPR8J）
+                if (handle != null && p.Handle != null && IsAltOnly(p, handle)) { p.LastAltRx = DateTime.UtcNow; handle = null; }
                 if (handle != null) { p.Handle = handle; p.DirectVerified = true; p.LastDirectRx = DateTime.UtcNow; }     // 房主接住的控制连接本身就是可用的直连边
                 if (!string.IsNullOrEmpty(addr)) p.Addr = addr;
                 if (UsableLan(lan)) p.LanAddr = lan;
@@ -987,12 +996,25 @@ namespace ForNet
             return dec + "src=" + pid + "\n";
         }
 
+        void NoteDecodeWait(int pid)
+        {
+            long count = System.Threading.Interlocked.Increment(ref mpDecodeWait);
+            var now = DateTime.UtcNow;
+            lock (receiveDiagSync)
+            {
+                DateTime last;
+                if (decodeWaitLog.TryGetValue(pid, out last) && (now - last).TotalSeconds < 10) return;
+                decodeWaitLog[pid] = now;
+            }
+            NetLog.W("多人状态解码：来源 " + pid + " 尚未拼成完整包，等待全量状态（累计 " + count + "）");
+        }
+
         void EmitDelivered(int pid, string tagged, bool isAi)
         {
             if (!isAi)
             {
                 tagged = DzDecode(pid, tagged);
-                if (tagged == null) return;
+                if (tagged == null) { NoteDecodeWait(pid); return; }
                 // 房里每位玩家的标识（同 1v1 的 PeerUid）：Program 据此把房里的人列进"最近对手"，能拉黑 / 举报
                 var uid = Ident.Field("\n" + tagged, "uid");
                 if (!string.IsNullOrEmpty(uid)) lock (sync) { MpPeerState pu; if (peers.TryGetValue(pid, out pu) && pu.Uid != uid) pu.Uid = uid; }
@@ -1001,8 +1023,17 @@ namespace ForNet
             {
                 // 房主代发的 AI 包：省流包按 "a<编号>" 拼回；完整包原样（记下当底）
                 string dec = meshDzIn.Take(StripSrc(tagged), null, "a" + pid);
-                if (dec == null) return;
+                if (dec == null) { NoteDecodeWait(pid); return; }
                 tagged = dec + "src=" + pid + "\n";
+            }
+            System.Threading.Interlocked.Increment(ref mpDecoded);
+            bool firstDecoded;
+            lock (receiveDiagSync) firstDecoded = decodedSeen.Add(pid);
+            if (firstDecoded)
+            {
+                var fields = Kv.Parse(tagged);
+                NetLog.W("多人状态解码：来源 " + pid + " 首个完整包，坐标字段 " + (fields.ContainsKey("x") && fields.ContainsKey("y") ? "齐" : "缺")
+                    + "，交付回调 " + (Deliver != null ? "有" : "无"));
             }
             if (Deliver != null) Deliver(tagged);
             if (IsHost && !isAi && OnHumanStateForAi != null)
@@ -1296,8 +1327,10 @@ namespace ForNet
         // 房主走了（告别 / 超时）。所有人按同一规则算候选人 = 自己看得见的在线玩家里编号最小的；
         // 只有选中自己的那台升代数、宣布；别人不动 HostPid，等它宣布（OnMpInfo 收到更大代数才换）。
         // 这样某一台只是自己和房主断了时不会单方面认一个别人不认的房主；等 6 秒还没人宣布就跳过那个候选人重选。
+        public bool AllowHostMigration = true;     // 仅经房主桥接的房没有成员间迁移路径
         public void MigrateHost(string why)
         {
+            if (!AllowHostMigration) return;
             DateTime now = DateTime.UtcNow;
             int oldHost, nextHost, nextEpoch = 0;
             bool self;
