@@ -540,8 +540,10 @@ local function roomLabel(kind, label, tg)
     local mode
     if not isMp then mode = T("[旧版]", "[CLASSIC]")
     elseif tg.m == "duel" then mode = T("[对决]", "[DUEL]")
+    elseif U.ROOM_TAG and U.ROOM_TAG[tg.m] then mode = T(U.ROOM_TAG[tg.m][1], U.ROOM_TAG[tg.m][2])     -- 玩法 mod 自己登记的（U.addRoomTag）
     elseif tg.m == "score" then mode = T("[积分]", "[SCORE]")
-    else mode = T("[淘汰]", "[ELIM]") end
+    elseif tg.m == nil or tg.m == "" or tg.m == "elim" then mode = T("[淘汰]", "[ELIM]")
+    else mode = T("[其他玩法]", "[OTHER]") end     -- 11-24 用户：本机没装的玩法 mod 开的房（如庞镇 royale）以前被兜成 [淘汰]
     local tags = { mode }
     if tg and tg.k == "srv" then tags[#tags + 1] = T("[服务器房]", "[SERVER]") end
     if full then tags[#tags + 1] = T("[已满]", "[FULL]") end     -- 满了排在对局中前面：多人房对局中能进，满了才是进不去的原因
@@ -1594,6 +1596,13 @@ function U.addConsent(d, owner)
     CONSENT.TEXT[d.key] = d.text
     if d.title then CONSENT.PRIVACY_TITLE[d.key] = d.title end
     if d.perServer then CONSENT.PER_SERVER[d.key] = true end
+end
+-- 玩法 mod 往多人房加的玩法：房间列表里的玩法标签（tg.m = 玩法名）。没登记的显示成 [其他玩法]（11-24 以前兜成 [淘汰]）
+U.ROOM_TAG = {}
+function U.addRoomTag(m, zh, en)
+    if type(m) ~= "string" or not m:match("^[%a_]+$") or type(zh) ~= "string" then return false end
+    U.ROOM_TAG[m] = { zh, en or zh }
+    return true
 end
 function U.page(name, items, title, head) U.pages[name] = { items = items, title = title, head = head } end
 function U.pagePrefixReg(prefix, items, title, head) U.pagePrefix[prefix] = { items = items, title = title, head = head } end
