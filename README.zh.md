@@ -1,5 +1,7 @@
 # 4net（fornet）
 
+![4net：UE4SS Lua mod 的联机底座，给 mod 开发者用](docs/images/cover_zh.jpg)
+
 [English](README.md)
 
 给 UE4SS Lua 模组用的联机底座，不绑定任何游戏。"4net" 读作 "for net"，和 .NET 没有关系。

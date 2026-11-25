@@ -1,5 +1,7 @@
 # 4net (fornet)
 
+![4net: online play for UE4SS Lua mods, for mod developers](docs/images/cover_en.jpg)
+
 [中文](README.zh.md)
 
 A game-agnostic online-play foundation for UE4SS Lua mods. "4net" reads "for net"; it is not a .NET library.
