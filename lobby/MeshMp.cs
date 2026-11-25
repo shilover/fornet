@@ -2573,6 +2573,25 @@ namespace ForNet
                 MpPeerState p = Get(relay);
                 if (p != null) { p.StateTx++; SendState(p, tagged, crit); }
             }
+            // §450.2 没有转发机、我是房主（在上场）：观众都隐藏 IP（一直桥接房里人人都是）就选不出转发机，以前两位选手只互发，
+            // 观众从开打起一包都收不到（11-25 22:31 观众 3 号"还没有别人的包"，替身 15 秒后收起、观战镜头没人可跟 → 一片白）。
+            // 隐藏 IP 的观众本来就只经房主转发，所以这时房主自己把包发给每位观众
+            if (relay == 0 && IsHost) DuelHostFeedSpecs(-1, tagged, crit);
+        }
+
+        // §450.2 房主选手兼转发：src = -1 是我自己的状态包（直接发），否则是对手的包（按转发信封发）
+        void DuelHostFeedSpecs(int src, string tagged, bool crit)
+        {
+            List<MpPeerState> list;
+            lock (sync) list = new List<MpPeerState>(peers.Values);
+            int fa = DuelFa, fb = DuelFb, me = MyPid;
+            for (int i = 0; i < list.Count; i++)
+            {
+                MpPeerState p = list[i];
+                if (p.IsAi || p.Pid <= 0 || p.Pid == me || p.Pid == fa || p.Pid == fb || p.Pid == src) continue;
+                if (src < 0) { p.StateTx++; SendState(p, tagged, crit); }
+                else SendFwd(p, src, tagged, crit);
+            }
         }
 
         // 收到并交给游戏的选手包（已去重）：记收包质量；我是转发机就转给每位观众（原样，保留 src / seq）
@@ -2583,6 +2602,8 @@ namespace ForNet
             NoteRx(src, seq);
             int me = MyPid;
             if (allowForward && me > 0 && me == DuelRelay && me != fa && me != fb) DuelForward(src, tagged);
+            // §450.2 没有转发机时房主选手把对手的包也转给观众（见 DuelBroadcastState）
+            else if (allowForward && me > 0 && DuelRelay == 0 && IsHost && (me == fa || me == fb) && src != me) DuelHostFeedSpecs(src, tagged, Critical(tagged));
         }
 
         void DuelForward(int src, string tagged)
