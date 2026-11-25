@@ -76,6 +76,7 @@ namespace ForNet
         public string Error { get { return error; } }
         public string RankPid { get; set; }
         public bool Ranked { get; set; }        // 0.34：排位房（REG 第 9 段 1 + pid）还是普通桥接平台房
+        public bool AiRoom { get; set; }        // AI 对练时同时开着的等人的房间（REG 第 14 段 = 1，房间列表标"和 AI 对打中"）
         public string PeerRk { get; private set; }
         public string PeerMt { get; private set; }
         public string PeerQuit { get; private set; }
@@ -121,7 +122,7 @@ namespace ForNet
                     lastReg = now;
                     bool full = link != null && link.Linked;
                     Raw(WireTag.S + "|REG|" + key + "|" + LobbyServer.Clean(name) + "|" + LobbyServer.Clean(MapOf()) + "|" + (full ? "1" : "0")
-                        + "||0|" + (Ranked ? "1|" + RankPid : "0|") + "|" + Bridge.MyId + "|0||0|" + Ident.MyRoomHash + "|1");     // 第 15 段 = 主机标记；0.34 第 16 段 = 对局走桥接平台
+                        + "||0|" + (Ranked ? "1|" + RankPid : "0|") + "|" + Bridge.MyId + "|0||" + (AiRoom ? "1" : "0") + "|" + Ident.MyRoomHash + "|1");     // 第 15 段 = 主机标记；0.34 第 16 段 = 对局走桥接平台
                 }
             }
             else if (sid == null && (now - lastJoin).TotalSeconds > JoinEvery)

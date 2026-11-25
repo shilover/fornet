@@ -25,9 +25,14 @@ NETUI.BUSY = {
     spectate = { "正在进入观战", "JOINING AS SPECTATOR" }, rotate = { "正在换人", "ROTATING" }, tospec = { "正在下场", "STEPPING DOWN" },
     hostdown = { "正在下场", "STEPPING DOWN" }, hostup = { "正在回来", "COMING BACK" },
 }
-for _, c in ipairs({ "name", "port", "upnp", "relay", "server", "secret", "lang", "ailevel", "aiload", "airoom", "airoommode" }) do
+-- 11-18 用户："调 AI 难度每次等好久、有时失败"：ailevel / aiload 只是写设置，联机程序立即生效，
+-- 不走"正在保存 + 等 ack 5 秒"那一套（等不到就报失败）；去掉这两个的忙状态
+for _, c in ipairs({ "name", "port", "upnp", "relay", "server", "secret", "lang", "airoom", "airoommode" }) do
     NETUI.BUSY[c] = { "正在保存", "SAVING" }
 end
+-- §452：这些命令重发会让联机程序把刚开的会话关掉重来，短时间内同一条只发一次（netuiCmd）
+NETUI.DEDUP = { host = true, mphost = true, join = true, mpjoin = true, spectate = true, ai = true }
+NETUI.DEDUP_SEC = 1.0
 local LOBBY_FILE, CMD_FILE = NET_DIR .. "/lobby.txt", NET_DIR .. "/cmd.txt"
 -- v0.20.2：虚拟局域网并进局域网（局域网顺带找 Tailscale 节点、显示虚拟网卡地址；联机程序把旧的 vlan 当 lan）
 -- v0.20.3：广域网并进服务器大厅（"输入 IP 直连…"；联机程序把旧的 wan 当 server）
@@ -143,6 +148,17 @@ local function netuiCmd(cmd, extra)
     -- 0.34 总原则：开房 / 加入 / AI 房等真人之前，先过一次性同意（CONSENT.gate 没过就翻到确认页，同意后原样重放这条命令）
     local CONSENT = consent()     -- F3b：同意框架由调用方给（main.lua 的全局 CONSENT）
     if CONSENT and CONSENT.gate and not CONSENT.gate(cmd, extra, function() netuiCmd(cmd, extra) end) then return end
+    -- §452：开房 / 加入 / 观战命令 1 秒内同一条只发一次。11-25 22:28:44 面板把一次点击算成两次，连发两个 mpjoin，
+    -- 联机程序把刚开的会话关掉重开，多用掉一次服务器的桥接介绍名额（随后 needsteam）
+    if NETUI.DEDUP[cmd] then
+        local key, t = ((NETUI.lobby or {}).mode or "") .. "\n" .. cmd .. "\n" .. (extra or ""), now()     -- 换了连接方式（局域网 → 本地 AI）再开房不算重复
+        local last = NETUI.lastCmd
+        if last and last.key == key and t - last.at >= 0 and t - last.at < NETUI.DEDUP_SEC then
+            out("联机面板：%s %s 刚发过（%.2f 秒前），这次不重复发（§452）", cmd, ((extra or ""):gsub("\n", " ")), t - last.at)
+            return
+        end
+        NETUI.lastCmd = { key = key, at = t }
+    end
     NETUI.cmdN = NETUI.cmdN + 1
     local id = string.format("%d-%d", os.time(), NETUI.cmdN)
     local ok = fileWrite(CMD_FILE, string.format("id=%s\ncmd=%s\n%s", id, cmd, extra or ""))
@@ -320,6 +336,17 @@ local COL_GRAY, COL_LABEL, COL_ORANGE, COL_RED, COL_WHITE = ctx.COL_GRAY, ctx.CO
 -- 11-13 冒烟：valid / getP1PC 以前是裸全局（main.lua 的 local，游戏里是 nil），鼠标面板建不起来又没日志。经 ctx 给；缺了用保守默认
 local valid = ctx.valid or function(o) return o ~= nil end
 local getP1PC = ctx.getP1PC or function() return nil end
+
+-- 11-18 用户：面板里"结束 XX / 退出 XX"这类按钮的文字改成红色，一眼看出会中断当前玩法。
+-- 只认能点的按钮（act，忙碌时 act 被摘掉、留 off）；说明行 / 菜单入口（"…"）不动；item.col 写了的按写的。
+local END_BTN = { "^结束", "^退出", "^断开", "^离开", "^解散", "^中止", "^取消.*对局",
+                  "^END ", "^DISCONNECT", "^LEAVE ", "^QUIT", "^EXIT" }
+local function itemCol(it)
+    if it.col or not (it.act or it.off) then return it.col end
+    local s = it.label or ""
+    for i = 1, #END_BTN do if s:find(END_BTN[i]) then return COL_RED end end
+    return nil
+end
 
 -- ---- v0.18.6 游戏内输入框（原 main.lua 段；说明见那里的标题行）
 -- UMG 的 EditableTextBox 放在屏幕文字的界面里；输入时 SetInputMode_UIOnlyEx，键盘只给输入框（游戏收不到，角色不动、Esc 不开菜单）。
@@ -527,8 +554,10 @@ local function roomLabel(kind, label, tg)
     local mode
     if not isMp then mode = T("[旧版]", "[CLASSIC]")
     elseif tg.m == "duel" then mode = T("[对决]", "[DUEL]")
+    elseif U.ROOM_TAG and U.ROOM_TAG[tg.m] then mode = T(U.ROOM_TAG[tg.m][1], U.ROOM_TAG[tg.m][2])     -- 玩法 mod 自己登记的（U.addRoomTag）
     elseif tg.m == "score" then mode = T("[积分]", "[SCORE]")
-    else mode = T("[淘汰]", "[ELIM]") end
+    elseif tg.m == nil or tg.m == "" or tg.m == "elim" then mode = T("[淘汰]", "[ELIM]")
+    else mode = T("[其他玩法]", "[OTHER]") end     -- 11-24 用户：本机没装的玩法 mod 开的房（如庞镇 royale）以前被兜成 [淘汰]
     local tags = { mode }
     if tg and tg.k == "srv" then tags[#tags + 1] = T("[服务器房]", "[SERVER]") end
     if full then tags[#tags + 1] = T("[已满]", "[FULL]") end     -- 满了排在对局中前面：多人房对局中能进，满了才是进不去的原因
@@ -606,6 +635,7 @@ local function joinItem(t, inList)
                  act = function() netuiFlash(T("对方还没开房", "THEY ARE NOT HOSTING YET"), COL_ORANGE) end }
     end
     local isMp = t.tg and (t.tg.k == "mp" or (tonumber(t.tg.max) or 0) >= 2)
+    local watchRoom = NETUI.roomWatch and inList     -- 11-18 观战选房页：点房间 = 观战
     if t.kind == "sroom" then     -- 0.34 对局走桥接平台的房：自己没开"对局走桥接平台"就先确认（steam_match），join 带桥接平台=1 让联机程序顺手开
         return { label = inList and clipText(t.label, ROOM_CLIP) or (T("加入 ", "JOIN ") .. clipText(t.label, 30)), target = t.target,
                  act = function()
@@ -613,17 +643,17 @@ local function joinItem(t, inList)
                          local svc = NETUI.bridgeSvc()
                          netuiFlash(T("这间房的对局走" .. svc .. "，要装了桥接扩展包并在它的插件页启用才能进", "THIS ROOM PLAYS OVER " .. svc:upper() .. "; NEEDS THE " .. svc:upper() .. " EXTENSION"), COL_ORANGE); return
                      end
-                     local cmdName = isMp and "mpjoin" or "join"
+                     local cmdName = watchRoom and "spectate" or (isMp and "mpjoin" or "join")
                      -- 主机设成一直桥接的房：客机不看自己的设置，只要同意过桥接（没同意就先问）
                      consent().ask("bridge_match", function() netuiCmd(cmdName, "target=" .. t.target .. "\nbridge=1\n") end)
                  end }
     end
     if isMp then
         return { label = inList and clipText(t.label, ROOM_CLIP) or (T("加入 ", "JOIN ") .. clipText(t.label, 30)), target = t.target,
-                 act = function() netuiCmd("mpjoin", "target=" .. t.target .. "\n") end }
+                 act = function() netuiCmd(watchRoom and "spectate" or "mpjoin", "target=" .. t.target .. "\n") end }
     end
     return { label = inList and clipText(t.label, ROOM_CLIP) or (T("加入 ", "JOIN ") .. clipText(t.label, 30)), target = t.target,
-             act = function() netuiCmd("join", "target=" .. t.target .. "\n") end }
+             act = function() netuiCmd(watchRoom and "spectate" or "join", "target=" .. t.target .. "\n") end }
 end
 
 local function noRoomsText(mode)
@@ -753,7 +783,7 @@ local function guiButton(size, halign)
         s:SetHorizontalAlignment(halign)
         s:SetVerticalAlignment(2)
     end)
-    return { b = b, tb = tb }
+    return { b = b, tb = tb, s = s }
 end
 
 -- 下面三个只在值变了时才调引擎
@@ -786,14 +816,21 @@ local LMB = { n = 0, seen = 0, pending = false }
 function U.lmbDown() if NETUI.open then LMB.n = LMB.n + 1 end end
 function U.guiTickBegin() LMB.pending = LMB.n > LMB.seen; LMB.seen = LMB.n end
 -- 这次查询算不算点了一下：上一次按着、这次松开且鼠标还在上面；或者这一拍左键钩子记到一次按下、鼠标在它上面
+-- §452：钩子往往比按钮早一帧知道左键按下（那一拍 IsPressed 还是 false）。以前只有当拍已按下才记"钩子点过了"，
+-- 于是下一拍按钮进按下、松开时又算一次 = 一按两次（11-25 22:28:44 加入房间连发两个 mpjoin）。
+-- 现在钩子点过就记时间，之后 HOOK_HOLD 秒内看到的那次松开不再算；看到松开就清掉
+local HOOK_HOLD = 1.5
 local function guiClicked(p)
     local okP, pressed = pcall(function() return p.b:IsPressed() end)
     local okH, hov = pcall(function() return p.b:IsHovered() end)
     pressed, hov = okP and pressed == true, okH and hov == true
-    local click = p.down == true and not pressed and hov
-    if click and p.hooked then click = false end          -- 这一按钩子已经点过了
-    if not pressed then p.hooked = nil end
-    if not click and LMB.pending and hov then click = true; LMB.pending = false; p.hooked = pressed or nil end
+    local released = p.down == true and not pressed
+    local click = released and hov
+    local t = now()
+    local fresh = p.hookedAt ~= nil and t - p.hookedAt >= 0 and t - p.hookedAt < HOOK_HOLD
+    if click and fresh then click = false end          -- 这一按钩子已经点过了
+    if released or (not pressed and not fresh) then p.hookedAt = nil end
+    if not click and LMB.pending and hov then click = true; LMB.pending = false; p.hookedAt = t end
     p.entered = hov and not p.hov
     p.down, p.hov = pressed, hov
     return click
@@ -860,6 +897,7 @@ local function guiBuild()
         add(GUI.navBox.b, 12)
         GUI.prev, GUI.next, GUI.back = guiButton(20, 2), guiButton(20, 2), guiButton(20, 2)
         GUI.filter = guiButton(20, 2)
+        GUI.enterMode = guiButton(20, 2)     -- 11-18 房间列表：进入方式（上场 / 只观战），小按钮放翻页栏
         GUI.pageNo = { tb = guiText(20, COL_WHITE) }
         GUI.navBox.b:AddChildToHorizontalBox(GUI.prev.b)
         local ps = GUI.navBox.b:AddChildToHorizontalBox(GUI.pageNo.tb)
@@ -868,6 +906,8 @@ local function guiBuild()
         GUI.navBox.b:AddChildToHorizontalBox(GUI.next.b)
         local gap = guiNew("Spacer")
         GUI.navBox.b:AddChildToHorizontalBox(gap):SetSize({ SizeRule = 1, Value = 1.0 })   -- 把"返回"推到最右
+        local es = GUI.navBox.b:AddChildToHorizontalBox(GUI.enterMode.b)
+        es:SetPadding({ Left = 0, Top = 0, Right = 12, Bottom = 0 })
         local fs = GUI.navBox.b:AddChildToHorizontalBox(GUI.filter.b)
         fs:SetPadding({ Left = 0, Top = 0, Right = 12, Bottom = 0 })
         GUI.navBox.b:AddChildToHorizontalBox(GUI.back.b)
@@ -1051,9 +1091,12 @@ function BFRIENDS.items(lb, items, page)
         if not inSession then
             items[#items + 1] = { label = T("开房（好友可见）", "HOST A ROOM (VISIBLE TO FRIENDS)"),
                                   act = function() consent().ask("bridge_match", function() netuiCmd("host", "bridge=1\n") end) end }
+            -- 11-19：没装 / 没启用多人模块时没有 mp 那条同意，「开房（最多 N 人）」点了只会卡在同意页 → 不显示
             local mpn = (BASEHOOK and BASEHOOK.mp and BASEHOOK.mp.cfg and BASEHOOK.mp.cfg.size) or 4
-            items[#items + 1] = { label = string.format(T("开房（好友可见，最多 %d 人）", "HOST A ROOM (VISIBLE TO FRIENDS, UP TO %d)"), mpn),
-                                  act = function() consent().ask("bridge_match", function() netuiCmd("mphost", "bridge=1\nn=" .. mpn .. "\n") end) end }
+            if BASEHOOK and BASEHOOK.mp then
+                items[#items + 1] = { label = string.format(T("开房（好友可见，最多 %d 人）", "HOST A ROOM (VISIBLE TO FRIENDS, UP TO %d)"), mpn),
+                                      act = function() consent().ask("bridge_match", function() netuiCmd("mphost", "bridge=1\nn=" .. mpn .. "\n") end) end }
+            end
         end
     end
     -- 11-15 用户："好友页里没必要再加一个（隐身），主面板上有最近的入口"：隐身开关只在"最近一起玩过的人"页，这里不再重复
@@ -1349,6 +1392,12 @@ function CONSENT.gate(cmd, extra, replay)
         local lb = netuiRead(now()) or {}
         keys = { "play", CONSENT.MODE_KEY[lb.airoommode or "lan"] }
     else return true end
+    -- 11-19：没装 / 没启用多人模块时没人登记 mp 这条同意。以前照样把 "mp" 加进 keys，面板翻到一条没有文案的同意页
+    -- （只写 "This needs your consent first (the text is missing)"），房开不出来也进不去。这里直接拦下并说清楚。
+    if isMp and not CONSENT.TEXT.mp then
+        netuiFlash(T("没装多人模块：只能开 / 加入旧版 1v1 房间", "NO MULTIPLAYER MODULE: CLASSIC 1V1 ROOMS ONLY"))
+        return false
+    end
     if isMp then keys[#keys + 1] = "mp" end
     if not isMp and CONSENT.TEXT.spec and keys[2] ~= nil and (cmd == "host" or cmd == "join" or cmd == "spectate")
        and not ((netuiRead(now()) or {}).mode == "ai") then keys[#keys + 1] = "spec" end     -- 11-14：观战 mod 的项（观众收到你的对局数据）
@@ -1569,6 +1618,13 @@ function U.addConsent(d, owner)
     if d.title then CONSENT.PRIVACY_TITLE[d.key] = d.title end
     if d.perServer then CONSENT.PER_SERVER[d.key] = true end
 end
+-- 玩法 mod 往多人房加的玩法：房间列表里的玩法标签（tg.m = 玩法名）。没登记的显示成 [其他玩法]（11-24 以前兜成 [淘汰]）
+U.ROOM_TAG = {}
+function U.addRoomTag(m, zh, en)
+    if type(m) ~= "string" or not m:match("^[%a_]+$") or type(zh) ~= "string" then return false end
+    U.ROOM_TAG[m] = { zh, en or zh }
+    return true
+end
 function U.page(name, items, title, head) U.pages[name] = { items = items, title = title, head = head } end
 function U.pagePrefixReg(prefix, items, title, head) U.pagePrefix[prefix] = { items = items, title = title, head = head } end
 local function pageReg(p)
@@ -1614,9 +1670,9 @@ local function netuiItems(lb, tn)
     end
     local mode = netuiMode(lb, tn)
     local function page(p) return function() NETUI.page = p; NETUI.sel = 1 end end
-    -- 每页底下：房间设置… 在 系统设置… 上面
+    -- 每页底下：通用对局规则…（原"房间设置…"，11-18 用户改名）在 系统设置… 上面
     local function settingsBtns()
-        items[#items + 1] = { label = T("房间设置…", "ROOM RULES..."), act = page("room") }
+        items[#items + 1] = { label = T("通用对局规则…", "GENERAL MATCH RULES..."), act = page("room") }
         items[#items + 1] = { label = T("系统设置…", "SYSTEM SETTINGS..."), act = page("settings") }
     end
     for _, h in ipairs(U.pollHooks) do pcall(h, lb) end     -- 原来只在没被前面的页截走时跑（X1 ST.ext.poll）；现在每次都跑
@@ -1779,7 +1835,7 @@ local function netuiRows(tn)
     for i = first, last do
         local it = items[i]
         local sel = i == NETUI.sel and it.act
-        rows[#rows + 1] = { c = sel and ("> " .. it.label .. " <") or it.label, col = sel and COL_WHITE or it.col or COL_GRAY, size = 0.7 }
+        rows[#rows + 1] = { c = sel and ("> " .. it.label .. " <") or it.label, col = sel and COL_WHITE or itemCol(it) or COL_GRAY, size = 0.7 }
     end
     if last < #items then
         rows[#rows + 1] = { c = T("（下面还有 " .. (#items - last) .. " 项）", "(" .. (#items - last) .. " MORE BELOW)"), col = COL_GRAY, size = 0.55 }
@@ -1833,6 +1889,7 @@ end
 
 -- 导出（main.lua 取别名；名字和搬之前一样）
 U.netuiStatus, U.netuiRows, U.netuiItems = netuiStatus, netuiRows, netuiItems     -- F3b-5
+U.netuiItemCol = itemCol     -- 11-18 结束 / 退出类按钮的红字（main.lua 的鼠标面板取）
 U.upnpFit, U.upnpClip = upnpFit, upnpClip     -- F3b-4
 U.CONSENT, U.EXTCTX, U.OPP = CONSENT, EXTCTX, OPP     -- F3b-4
 U.RECENT = RECENT     -- F3b-3
