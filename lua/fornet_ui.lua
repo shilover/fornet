@@ -30,6 +30,9 @@ NETUI.BUSY = {
 for _, c in ipairs({ "name", "port", "upnp", "relay", "server", "secret", "lang", "airoom", "airoommode" }) do
     NETUI.BUSY[c] = { "正在保存", "SAVING" }
 end
+-- §452：这些命令重发会让联机程序把刚开的会话关掉重来，短时间内同一条只发一次（netuiCmd）
+NETUI.DEDUP = { host = true, mphost = true, join = true, mpjoin = true, spectate = true, ai = true }
+NETUI.DEDUP_SEC = 1.0
 local LOBBY_FILE, CMD_FILE = NET_DIR .. "/lobby.txt", NET_DIR .. "/cmd.txt"
 -- v0.20.2：虚拟局域网并进局域网（局域网顺带找 Tailscale 节点、显示虚拟网卡地址；联机程序把旧的 vlan 当 lan）
 -- v0.20.3：广域网并进服务器大厅（"输入 IP 直连…"；联机程序把旧的 wan 当 server）
@@ -145,6 +148,17 @@ local function netuiCmd(cmd, extra)
     -- 0.34 总原则：开房 / 加入 / AI 房等真人之前，先过一次性同意（CONSENT.gate 没过就翻到确认页，同意后原样重放这条命令）
     local CONSENT = consent()     -- F3b：同意框架由调用方给（main.lua 的全局 CONSENT）
     if CONSENT and CONSENT.gate and not CONSENT.gate(cmd, extra, function() netuiCmd(cmd, extra) end) then return end
+    -- §452：开房 / 加入 / 观战命令 1 秒内同一条只发一次。11-25 22:28:44 面板把一次点击算成两次，连发两个 mpjoin，
+    -- 联机程序把刚开的会话关掉重开，多用掉一次服务器的桥接介绍名额（随后 needsteam）
+    if NETUI.DEDUP[cmd] then
+        local key, t = ((NETUI.lobby or {}).mode or "") .. "\n" .. cmd .. "\n" .. (extra or ""), now()     -- 换了连接方式（局域网 → 本地 AI）再开房不算重复
+        local last = NETUI.lastCmd
+        if last and last.key == key and t - last.at >= 0 and t - last.at < NETUI.DEDUP_SEC then
+            out("联机面板：%s %s 刚发过（%.2f 秒前），这次不重复发（§452）", cmd, ((extra or ""):gsub("\n", " ")), t - last.at)
+            return
+        end
+        NETUI.lastCmd = { key = key, at = t }
+    end
     NETUI.cmdN = NETUI.cmdN + 1
     local id = string.format("%d-%d", os.time(), NETUI.cmdN)
     local ok = fileWrite(CMD_FILE, string.format("id=%s\ncmd=%s\n%s", id, cmd, extra or ""))
@@ -802,14 +816,21 @@ local LMB = { n = 0, seen = 0, pending = false }
 function U.lmbDown() if NETUI.open then LMB.n = LMB.n + 1 end end
 function U.guiTickBegin() LMB.pending = LMB.n > LMB.seen; LMB.seen = LMB.n end
 -- 这次查询算不算点了一下：上一次按着、这次松开且鼠标还在上面；或者这一拍左键钩子记到一次按下、鼠标在它上面
+-- §452：钩子往往比按钮早一帧知道左键按下（那一拍 IsPressed 还是 false）。以前只有当拍已按下才记"钩子点过了"，
+-- 于是下一拍按钮进按下、松开时又算一次 = 一按两次（11-25 22:28:44 加入房间连发两个 mpjoin）。
+-- 现在钩子点过就记时间，之后 HOOK_HOLD 秒内看到的那次松开不再算；看到松开就清掉
+local HOOK_HOLD = 1.5
 local function guiClicked(p)
     local okP, pressed = pcall(function() return p.b:IsPressed() end)
     local okH, hov = pcall(function() return p.b:IsHovered() end)
     pressed, hov = okP and pressed == true, okH and hov == true
-    local click = p.down == true and not pressed and hov
-    if click and p.hooked then click = false end          -- 这一按钩子已经点过了
-    if not pressed then p.hooked = nil end
-    if not click and LMB.pending and hov then click = true; LMB.pending = false; p.hooked = pressed or nil end
+    local released = p.down == true and not pressed
+    local click = released and hov
+    local t = now()
+    local fresh = p.hookedAt ~= nil and t - p.hookedAt >= 0 and t - p.hookedAt < HOOK_HOLD
+    if click and fresh then click = false end          -- 这一按钩子已经点过了
+    if released or (not pressed and not fresh) then p.hookedAt = nil end
+    if not click and LMB.pending and hov then click = true; LMB.pending = false; p.hookedAt = t end
     p.entered = hov and not p.hov
     p.down, p.hov = pressed, hov
     return click
