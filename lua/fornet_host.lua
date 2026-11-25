@@ -10,7 +10,7 @@
 -- title=<显示名> 日志里用（可选）
 -- 选哪个适件：games\games.txt 第一行非注释的名字；没有就按目录名排序取第一个（有多个时记一行日志）。
 -- 列目录优先 games\games.txt（没有 io.popen 的环境 / 想固定顺序），没有再用 dir /b /ad。
-local HOST_VERSION = "0.4.0"     -- 0.4.0：联机程序启动时读适配 manifest（游戏名 / 进程名 / 版本 / 协议名 / 存档备份），编好的 DLL 别的游戏直接能用；0.2.0：F6 第二步（FORNET.mods / adopt / loop / 接口表检查）；0.3.0：玩法 mod（mods\，fornet_mods.lua， L1）
+local HOST_VERSION = "0.4.1"     -- 0.4.1：全互连 / 桥接 / 面板修复（见 Release 说明）；0.4.0：联机程序启动时读适配 manifest（游戏名 / 进程名 / 版本 / 协议名 / 存档备份），编好的 DLL 别的游戏直接能用；0.2.0：F6 第二步（FORNET.mods / adopt / loop / 接口表检查）；0.3.0：玩法 mod（mods\，fornet_mods.lua， L1）
 
 local function log(fmt, ...)
     local ok, s = pcall(string.format, fmt, ...)

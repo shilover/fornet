@@ -2,7 +2,7 @@
 
 [中文](USAGE.md)
 
-For people who want to add online play to a UE4SS game with 4net. Host version `0.4.0`.
+For people who want to add online play to a UE4SS game with 4net. Host version `0.4.1`.
 
 > There is **no ready-made sample game** (adapter + base play mod) in this repository yet: the one game that uses 4net keeps its adapter
 > elsewhere. This guide describes the interfaces and conventions. For a new game, first aim for "both players see each other's puppet move",
